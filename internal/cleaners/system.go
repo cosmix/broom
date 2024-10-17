@@ -7,12 +7,12 @@ import (
 )
 
 func init() {
-	registerCleanup("kernels", Cleaner{CleanupFunc: removeOldKernels, RequiresConfirmation: true})
-	registerCleanup("packages", Cleaner{CleanupFunc: removeUnnecessaryPackages, RequiresConfirmation: true})
-	registerCleanup("apt", Cleaner{CleanupFunc: clearAptCache, RequiresConfirmation: true})
+	registerCleanup("kernels", Cleaner{CleanupFunc: removeOldKernels, RequiresConfirmation: false})
+	registerCleanup("packages", Cleaner{CleanupFunc: removeUnnecessaryPackages, RequiresConfirmation: false})
+	registerCleanup("apt", Cleaner{CleanupFunc: clearAptCache, RequiresConfirmation: false})
 	registerCleanup("logs", Cleaner{CleanupFunc: removeOldLogs, RequiresConfirmation: true})
 	registerCleanup("crash", Cleaner{CleanupFunc: removeCrashReports, RequiresConfirmation: true})
-	registerCleanup("temp", Cleaner{CleanupFunc: removeTemp, RequiresConfirmation: true})
+	registerCleanup("temp", Cleaner{CleanupFunc: removeTemp, RequiresConfirmation: false})
 	registerCleanup("journal", Cleaner{CleanupFunc: cleanJournalLogs, RequiresConfirmation: true})
 }
 

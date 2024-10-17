@@ -1,6 +1,6 @@
 # Broom - System Cleanup Utility
 
-Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems that helps you free up disk space by removing unnecessary files and cleaning up various system components. It has been tested on Debian/Ubuntu/Pop!_OS etc., but should work on other Linux distributions as well.
+Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems that helps you free up disk space by removing unnecessary files and cleaning up various system components. It is work in progress, and has been tested only on Debian/Ubuntu/Pop!_OS etc., but should work reasonably well on other Linux distributions.
 
 ## Features
 
@@ -8,12 +8,10 @@ Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems
 - Remove unnecessary packages
 - Clear APT cache
 - Remove old log files
-- Remove unused language files
-- Clean up Docker data
+- Clean up unused Docker data
 - Clean up old Snap versions
 - Remove crash reports and core dumps
-- Clean up home directory
-- Remove temporary files and old backups (excluding system directories like /run, /proc, /sys, and /dev)
+- Remove temporary files and old backups (excluding system directories e.g. /run, /proc, /sys, and /dev)
 - Clean old systemd journal logs
 - Remove old Flatpak runtimes
 - Clean up user cache directories
@@ -32,6 +30,8 @@ Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems
 - Clean up old Electron apps cache
 - Remove old Virtualbox disk images
 - Use `fd` for faster file searching when available, with fallback to `find`
+
+Broom asks you for confirmation whenever it's about to perform a potentially destructive operation. You can choose to include or exclude specific 'cleaners' based on your requirements. At the end of a brooming session you will be presented with a summary of the cleanup operations performed, and their characteristics.
 
 ## Usage
 
@@ -69,7 +69,7 @@ sudo make install
 
 ## Note
 
-This program requires root privileges to perform most cleanup operations. Always use with caution and consider backing up important data before running extensive cleanup operations.
+**Important:** This program requires root privileges to perform most cleanup operations. Always use with caution and consider backing up important data before running extensive cleanup operations.
 
 ## Contributing
 

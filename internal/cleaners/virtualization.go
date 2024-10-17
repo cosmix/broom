@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	registerCleanup("virtualbox", Cleaner{CleanupFunc: removeOldVirtualboxImages, RequiresConfirmation: false})
+	registerCleanup("virtualbox", Cleaner{CleanupFunc: removeOldVirtualboxImages, RequiresConfirmation: true})
 }
 
 func removeOldVirtualboxImages() error {

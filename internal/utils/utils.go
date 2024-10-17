@@ -65,41 +65,6 @@ func FormatBytes(bytes uint64) string {
 	return fmt.Sprintf("%.1f %ciB", bytesFloat/div, "KMGTPE"[exp])
 }
 
-// CalculateSpaceFreed calculates the space freed by a cleanup operation
-func CalculateSpaceFreed(startSpace, endSpace uint64, sectionName string) (uint64, string) {
-	const maxReasonableSpaceFreed = 1024 * 1024 * 1024 * 1024 // 1 TiB
-	const debugLogFile = "/tmp/broom_debug.log"
-
-	logDebug := func(message string) {
-		f, err := os.OpenFile(debugLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return
-		}
-		defer f.Close()
-		fmt.Fprintf(f, "[%s] %s: %s\n", time.Now().Format(time.RFC3339), sectionName, message)
-	}
-
-	logDebug(fmt.Sprintf("Start space: %d, End space: %d", startSpace, endSpace))
-
-	if endSpace > startSpace {
-		spaceFreed := endSpace - startSpace
-		if spaceFreed > maxReasonableSpaceFreed {
-			logDebug(fmt.Sprintf("Unreasonable space freed: %d bytes", spaceFreed))
-			return 0, fmt.Sprintf("Space freed by %s: Calculation error (unreasonable value)", sectionName)
-		}
-		logDebug(fmt.Sprintf("Space freed: %d bytes", spaceFreed))
-		return spaceFreed, fmt.Sprintf("Space freed by %s: %s", sectionName, FormatBytes(spaceFreed))
-	}
-
-	if startSpace > endSpace {
-		logDebug(fmt.Sprintf("Negative space freed: %d bytes", startSpace-endSpace))
-		return 0, fmt.Sprintf("Space freed by %s: Insignificant (possible reallocation)", sectionName)
-	}
-
-	logDebug("No space freed")
-	return 0, fmt.Sprintf("Space freed by %s: Insignificant", sectionName)
-}
-
 // RunWithIndicator runs a command with a spinner indicator and a message
 func RunWithIndicator(command, message string) error {
 	s := spinner.New(spinner.CharSets[11], 100*time.Millisecond)
@@ -139,21 +104,6 @@ func RunFdOrFind(path, args, message string, ignoreErrors bool) error {
 func CommandExists(cmd string) bool {
 	_, err := exec.LookPath(cmd)
 	return err == nil
-}
-
-// AskConfirmation asks the user for confirmation before proceeding
-func AskConfirmation(message string) bool {
-	fmt.Printf("Warning: %s\n", message)
-	fmt.Print("Do you want to proceed? (y/n): ")
-
-	var response string
-	_, err := fmt.Scanln(&response)
-	if err != nil {
-		return false
-	}
-
-	response = strings.ToLower(strings.TrimSpace(response))
-	return response == "y" || response == "yes"
 }
 
 // CheckRoot checks if the program is running as root

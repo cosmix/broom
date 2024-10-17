@@ -3,7 +3,6 @@ package cleaners
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/cosmix/broom/internal/utils"
@@ -30,15 +29,22 @@ func GetAllCleanupTypes() []string {
 	return types
 }
 
+func GetCleaner(cleanupType string) (Cleaner, bool) {
+	cleanerInterface, ok := cleanupFunctions.Load(cleanupType)
+	if !ok {
+		return Cleaner{}, false
+	}
+	return cleanerInterface.(Cleaner), true
+}
+
 func PerformCleanup(cleanupType string) (uint64, error) {
 	startSpace := utils.GetFreeDiskSpace()
 
-	cleanerInterface, ok := cleanupFunctions.Load(cleanupType)
+	cleaner, ok := GetCleaner(cleanupType)
 	if !ok {
 		return 0, fmt.Errorf("unknown cleanup type: %s", cleanupType)
 	}
 
-	cleaner := cleanerInterface.(Cleaner)
 	var err error
 	func() {
 		defer func() {
@@ -61,25 +67,4 @@ func PerformCleanup(cleanupType string) (uint64, error) {
 		spaceFreed = startSpace - endSpace
 	}
 	return spaceFreed, nil
-}
-
-func GetCleanupDescription() string {
-	var sb strings.Builder
-	sb.WriteString("Available cleanup types:\n")
-
-	types := GetAllCleanupTypes()
-	for _, t := range types {
-		sb.WriteString(fmt.Sprintf("- %s\n", t))
-	}
-
-	return sb.String()
-}
-
-func CleanupRequiresConfirmation(cleanupType string) bool {
-	cleanerInterface, ok := cleanupFunctions.Load(cleanupType)
-	if !ok {
-		return false
-	}
-	cleaner := cleanerInterface.(Cleaner)
-	return cleaner.RequiresConfirmation
 }

@@ -36,32 +36,6 @@ func TestFormatBytes(t *testing.T) {
 	}
 }
 
-func TestCalculateSpaceFreed(t *testing.T) {
-	tests := []struct {
-		startSpace      uint64
-		endSpace        uint64
-		sectionName     string
-		expectedSpace   uint64
-		expectedMessage string
-	}{
-		{1000, 2000, "test1", 1000, "Space freed by test1: 1000 B"},
-		{2000, 1000, "test2", 0, "Space freed by test2: Insignificant (possible reallocation)"},
-		{1048576, 2097152, "test3", 1048576, "Space freed by test3: 1.0 MiB"},
-	}
-
-	for _, test := range tests {
-		spaceFreed, message := CalculateSpaceFreed(test.startSpace, test.endSpace, test.sectionName)
-		if spaceFreed != test.expectedSpace {
-			t.Errorf("CalculateSpaceFreed(%d, %d, %s) returned space %d; want %d",
-				test.startSpace, test.endSpace, test.sectionName, spaceFreed, test.expectedSpace)
-		}
-		if message != test.expectedMessage {
-			t.Errorf("CalculateSpaceFreed(%d, %d, %s) returned message '%s'; want '%s'",
-				test.startSpace, test.endSpace, test.sectionName, message, test.expectedMessage)
-		}
-	}
-}
-
 func TestRunWithIndicator(t *testing.T) {
 	// Test with a valid command expected to succeed
 	err := RunWithIndicator("echo 'test'", "Testing RunWithIndicator success")

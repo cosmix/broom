@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -26,9 +27,13 @@ type cleanupResult struct {
 	err         error
 	spaceFreed  uint64
 	duration    time.Duration
+	skipped     bool
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -36,7 +41,7 @@ func main() {
 	go func() {
 		<-sigChan
 		fmt.Println("\nReceived interrupt signal. Exiting...")
-		os.Exit(0)
+		cancel()
 	}()
 
 	utils.CheckRoot()
@@ -69,7 +74,7 @@ func main() {
 	startSpace := utils.GetFreeDiskSpace()
 	fmt.Println(au.Blue(fmt.Sprintf("Free disk space before cleanup: %s", utils.FormatBytes(startSpace))))
 
-	results := performCleanups(typesToRun)
+	results := performCleanups(ctx, typesToRun)
 
 	endSpace := utils.GetFreeDiskSpace()
 	fmt.Println(au.Blue(fmt.Sprintf("\nFree disk space after cleanup: %s", utils.FormatBytes(endSpace))))
@@ -86,99 +91,150 @@ func main() {
 		fmt.Println(au.Blue("This can happen if the system was already clean or if freed space was immediately reallocated."))
 	}
 
-	printCleanupSummary(results, totalSpaceFreed)
+	printCleanupSummary(results, totalSpaceFreed, startSpace)
 
 	utils.PrintCompletionBanner()
 }
 
-func performCleanups(typesToRun []string) []cleanupResult {
+func performCleanups(ctx context.Context, typesToRun []string) []cleanupResult {
 	results := make([]cleanupResult, 0, len(typesToRun))
 
 	for _, cleanupType := range typesToRun {
-		utils.PrintHeader(cleanupType)
+		select {
+		case <-ctx.Done():
+			return results
+		default:
+			utils.PrintHeader(cleanupType)
 
-		if needsConfirmation(cleanupType) {
-			prompt := promptui.Prompt{
-				Label:     fmt.Sprintf("Do you want to proceed with %s cleanup", cleanupType),
-				IsConfirm: true,
+			if needsConfirmation(cleanupType) {
+				prompt := promptui.Prompt{
+					Label:     fmt.Sprintf("Do you want to proceed with %s cleanup", cleanupType),
+					IsConfirm: true,
+				}
+
+				result, err := prompt.Run()
+				if err != nil || strings.ToLower(result) != "y" {
+					fmt.Printf("Skipping %s cleanup\n\n", cleanupType)
+					results = append(results, cleanupResult{
+						cleanupType: cleanupType,
+						result:      "Skipped",
+						skipped:     true,
+					})
+					continue
+				}
 			}
 
-			_, err := prompt.Run()
+			startTime := time.Now()
+			spaceFreed, err := cleaners.PerformCleanup(cleanupType)
+			duration := time.Since(startTime)
+
+			result := cleanupResult{
+				cleanupType: cleanupType,
+				result:      "Cleanup completed successfully",
+				err:         err,
+				spaceFreed:  spaceFreed,
+				duration:    duration,
+				skipped:     false,
+			}
+
 			if err != nil {
-				fmt.Printf("Skipping %s cleanup\n\n", cleanupType)
-				continue
+				result.result = fmt.Sprintf("Error during cleanup: %v", err)
 			}
+
+			results = append(results, result)
+
+			// Print result immediately after each cleanup
+			if result.err != nil {
+				fmt.Println(au.Red(result.result))
+			} else {
+				fmt.Println(au.Green(result.result))
+			}
+			spaceFreedStr := utils.FormatBytes(result.spaceFreed)
+			if result.spaceFreed == 0 {
+				spaceFreedStr = "Insignificant"
+			}
+			fmt.Println(au.Blue(fmt.Sprintf("Space freed: %s", spaceFreedStr)))
+			durationValue, durationUnit := formatDuration(result.duration)
+			fmt.Printf(au.Blue("Time taken: %.2f%s\n").String(), durationValue, durationUnit)
+			fmt.Println() // Add a newline for better separation between cleanup types
 		}
-
-		startTime := time.Now()
-		spaceFreed, err := cleaners.PerformCleanup(cleanupType)
-		duration := time.Since(startTime)
-
-		result := cleanupResult{
-			cleanupType: cleanupType,
-			result:      "Cleanup completed successfully",
-			err:         err,
-			spaceFreed:  spaceFreed,
-			duration:    duration,
-		}
-
-		if err != nil {
-			result.result = fmt.Sprintf("Error during cleanup: %v", err)
-		}
-
-		results = append(results, result)
-		fmt.Println() // Add a newline for better separation between cleanup types
 	}
-
-	// Print results after all cleanups are done
-	printCleanupResults(results)
 
 	return results
 }
 
-func printCleanupResults(results []cleanupResult) {
-	for _, result := range results {
-		utils.PrintHeader(result.cleanupType)
-		if result.err != nil {
-			fmt.Println(au.Red(result.result))
-		} else {
-			fmt.Println(au.Green(result.result))
-		}
-		spaceFreedStr := utils.FormatBytes(result.spaceFreed)
-		if result.spaceFreed == 0 {
-			spaceFreedStr = "Insignificant"
-		}
-		fmt.Println(au.Blue(fmt.Sprintf("Space freed: %s", spaceFreedStr)))
-		durationValue, durationUnit := formatDuration(result.duration)
-		fmt.Printf(au.Blue("Time taken: %.2f%s\n").String(), durationValue, durationUnit)
-		fmt.Println()
-	}
-}
-
-func printCleanupSummary(results []cleanupResult, totalSpaceFreed uint64) {
+func printCleanupSummary(results []cleanupResult, totalSpaceFreed, startSpace uint64) {
 	fmt.Println(au.Bold("\nCleanup Summary:"))
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Cleanup Type", "Status", "Space Freed", "Time Taken"})
 	table.SetBorder(false)
+	table.SetAutoWrapText(false)
+	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_RIGHT})
+
+	maxSpaceFreed := uint64(0)
+	maxDuration := time.Duration(0)
 
 	for _, result := range results {
-		status := "Success"
-		if result.err != nil {
-			status = "Error"
+		if result.spaceFreed > maxSpaceFreed {
+			maxSpaceFreed = result.spaceFreed
 		}
-		spaceFreed := utils.FormatBytes(result.spaceFreed)
-		if result.spaceFreed == 0 {
-			spaceFreed = "Insignificant"
+		if result.duration > maxDuration {
+			maxDuration = result.duration
 		}
-		durationValue, durationUnit := formatDuration(result.duration)
-		timeTaken := fmt.Sprintf("%.2f%s", durationValue, durationUnit)
+	}
+
+	for _, result := range results {
+		status := getColoredStatus(result.skipped, result.err)
+		spaceFreed := getColoredSpaceFreed(result.spaceFreed, maxSpaceFreed, startSpace)
+		timeTaken := getColoredDuration(result.duration, maxDuration)
 
 		table.Append([]string{result.cleanupType, status, spaceFreed, timeTaken})
 	}
 
 	table.SetFooter([]string{"Total", "", utils.FormatBytes(totalSpaceFreed), ""})
 	table.Render()
+}
+
+func getColoredStatus(skipped bool, err error) string {
+	if skipped {
+		return fmt.Sprintf("\x1b[38;2;255;165;0m%s\x1b[0m", "Skipped") // Orange
+	} else if err != nil {
+		return fmt.Sprintf("\x1b[31m%s\x1b[0m", "Error") // Red
+	}
+	return fmt.Sprintf("\x1b[32m%s\x1b[0m", "Success") // Green
+}
+
+func getColoredSpaceFreed(spaceFreed, maxSpaceFreed, startSpace uint64) string {
+	if spaceFreed == 0 {
+		return fmt.Sprintf("\x1b[32m%s\x1b[0m", "Insignificant") // Green
+	}
+
+	threshold := startSpace / 2 // 50% of the disk space previously available
+	if maxSpaceFreed > threshold {
+		maxSpaceFreed = threshold
+	}
+
+	ratio := float64(spaceFreed) / float64(maxSpaceFreed)
+	r, g, b := getHeatmapColor(ratio)
+
+	// Format the space freed and ensure the entire string is colored
+	formattedSpace := utils.FormatBytes(spaceFreed)
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm%s\x1b[0m", r, g, b, formattedSpace)
+}
+
+func getColoredDuration(duration, maxDuration time.Duration) string {
+	durationValue, durationUnit := formatDuration(duration)
+	ratio := float64(duration) / float64(maxDuration)
+	r, g, b := getHeatmapColor(ratio)
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm%.2f%s\x1b[0m", r, g, b, durationValue, durationUnit)
+}
+
+func getHeatmapColor(ratio float64) (r, g, b uint8) {
+	if ratio < 0.5 {
+		return 0, 255, uint8(255 * (1 - 2*ratio))
+	}
+	return uint8(255 * (2*ratio - 1)), uint8(255 * (2 - 2*ratio)), 0
 }
 
 func parseFlags(excludeTypes, includeTypes string, allFlag bool) ([]string, error) {
@@ -231,10 +287,11 @@ func contains(slice []string, item string) bool {
 }
 
 func needsConfirmation(cleanupType string) bool {
-	confirmationTypes := []string{
-		"kernels", "docker", "crash", "journal", "flatpak", "timeshift", "trash",
+	cleaner, ok := cleaners.GetCleaner(cleanupType)
+	if !ok {
+		return false
 	}
-	return contains(confirmationTypes, cleanupType)
+	return cleaner.RequiresConfirmation
 }
 
 func formatDuration(d time.Duration) (float64, string) {
