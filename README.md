@@ -46,7 +46,7 @@ Options:
 
 Example:
 ```
-sudo ./broom -x docker,snap -i kernels,packages
+sudo ./broom -x docker,snap -i snap,temp
 ```
 
 Note that the `-x` and `-i` options are mutually exclusive.
