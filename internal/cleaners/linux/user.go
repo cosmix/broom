@@ -1,16 +1,17 @@
-package cleaners
+package linux
 
 import (
 	"fmt"
 
+	"github.com/cosmix/broom/internal/cleaners"
 	"github.com/cosmix/broom/internal/utils"
 )
 
 func init() {
-	registerCleanup("home", Cleaner{CleanupFunc: cleanHomeDirectory, RequiresConfirmation: true})
-	registerCleanup("cache", Cleaner{CleanupFunc: cleanUserCaches, RequiresConfirmation: true})
-	registerCleanup("trash", Cleaner{CleanupFunc: cleanUserTrash, RequiresConfirmation: true})
-	registerCleanup("user_logs", Cleaner{CleanupFunc: cleanUserHomeLogs, RequiresConfirmation: true})
+	cleaners.RegisterCleanup("home", cleaners.Cleaner{CleanupFunc: cleanHomeDirectory, RequiresConfirmation: true})
+	cleaners.RegisterCleanup("cache", cleaners.Cleaner{CleanupFunc: cleanUserCaches, RequiresConfirmation: true})
+	cleaners.RegisterCleanup("trash", cleaners.Cleaner{CleanupFunc: cleanUserTrash, RequiresConfirmation: true})
+	cleaners.RegisterCleanup("user_logs", cleaners.Cleaner{CleanupFunc: cleanUserHomeLogs, RequiresConfirmation: true})
 }
 
 func cleanHomeDirectory() error {

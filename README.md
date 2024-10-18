@@ -1,8 +1,10 @@
 # 🧹 Broom - System Cleanup Utility
 
-Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems that helps you free up disk space by removing unnecessary files and cleaning up various system components. It is work in progress, and has been tested only on Debian/Ubuntu/Pop!_OS etc., but should work reasonably well on other Linux distributions.
+Broom is a Go-based system cleanup utility for GNU/Linux-based and macOS operating systems that helps you free up disk space by removing unnecessary files and cleaning up various system components. It is work in progress. It has been tested only on Debian/Ubuntu/Pop!_OS etc. on the GNU/Linux side and macOS Sequoia, but should work reasonably well on other Linux distributions and older versions of macOS.
 
 ## Features
+
+### Linux 
 
 - Remove old kernel versions
 - Remove unnecessary packages
@@ -30,6 +32,15 @@ Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems
 - Clean up old Electron apps cache
 - Remove old Virtualbox disk images
 - Use `fd` for faster file searching when available, with fallback to `find`
+
+### macOS
+
+- Empty macOS Trash
+- Clean system cache
+- Clean system logs
+- Clean Xcode cache (derived data)
+- Clean user caches (~/Library/Caches)
+- Clean user logs (~/Library/Logs, older than 30 days)
 
 Broom asks you for confirmation whenever it's about to perform a potentially destructive operation. You can choose to include or exclude specific 'cleaners' based on your requirements. At the end of a brooming session you will be presented with a summary of the cleanup operations performed, and their characteristics.
 

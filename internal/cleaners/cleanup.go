@@ -15,7 +15,7 @@ type Cleaner struct {
 
 var cleanupFunctions sync.Map
 
-func registerCleanup(name string, cleaner Cleaner) {
+func RegisterCleanup(name string, cleaner Cleaner) {
 	cleanupFunctions.Store(name, cleaner)
 }
 

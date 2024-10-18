@@ -1,4 +1,4 @@
-package cleaners
+package linux
 
 import (
 	"errors"

@@ -55,8 +55,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nAvailable cleanup types:\n")
-		for _, t := range cleaners.GetAllCleanupTypes() {
-			fmt.Fprintf(os.Stderr, "  %s\n", t)
+		for name := range getOSSpecificCleaners() {
+			fmt.Fprintf(os.Stderr, "  %s\n", name)
 		}
 	}
 
@@ -98,6 +98,7 @@ func main() {
 
 func performCleanups(ctx context.Context, typesToRun []string) []cleanupResult {
 	results := make([]cleanupResult, 0, len(typesToRun))
+	osSpecificCleaners := getOSSpecificCleaners()
 
 	for _, cleanupType := range typesToRun {
 		select {
@@ -106,7 +107,18 @@ func performCleanups(ctx context.Context, typesToRun []string) []cleanupResult {
 		default:
 			utils.PrintHeader(cleanupType)
 
-			if needsConfirmation(cleanupType) {
+			cleaner, ok := osSpecificCleaners[cleanupType]
+			if !ok {
+				fmt.Printf("Skipping %s cleanup: not available for current OS\n\n", cleanupType)
+				results = append(results, cleanupResult{
+					cleanupType: cleanupType,
+					result:      "Skipped (not available for current OS)",
+					skipped:     true,
+				})
+				continue
+			}
+
+			if cleaner.RequiresConfirmation {
 				prompt := promptui.Prompt{
 					Label:     fmt.Sprintf("Do you want to proceed with %s cleanup", cleanupType),
 					IsConfirm: true,
@@ -161,6 +173,75 @@ func performCleanups(ctx context.Context, typesToRun []string) []cleanupResult {
 	}
 
 	return results
+}
+
+func parseFlags(excludeTypes, includeTypes string, allFlag bool) ([]string, error) {
+	switch {
+	case excludeTypes != "" && includeTypes != "":
+		return nil, fmt.Errorf("-i and -x options cannot be used together")
+	case allFlag && (excludeTypes != "" || includeTypes != ""):
+		return nil, fmt.Errorf("--all option cannot be used with -i or -x")
+	case !allFlag && excludeTypes == "" && includeTypes == "":
+		return nil, fmt.Errorf("no cleanup types specified")
+	}
+
+	cleanupTypes := getCleanupTypes()
+	var typesToRun []string
+
+	if allFlag {
+		typesToRun = cleanupTypes
+	} else if includeTypes != "" {
+		for _, t := range strings.Split(includeTypes, ",") {
+			if !contains(cleanupTypes, t) {
+				return nil, fmt.Errorf("invalid cleanup type: %s", t)
+			}
+			typesToRun = append(typesToRun, t)
+		}
+	} else {
+		excludeMap := make(map[string]bool)
+		for _, t := range strings.Split(excludeTypes, ",") {
+			if !contains(cleanupTypes, t) {
+				return nil, fmt.Errorf("invalid cleanup type: %s", t)
+			}
+			excludeMap[t] = true
+		}
+		for _, t := range cleanupTypes {
+			if !excludeMap[t] {
+				typesToRun = append(typesToRun, t)
+			}
+		}
+	}
+
+	return typesToRun, nil
+}
+
+func getCleanupTypes() []string {
+	osSpecificCleaners := getOSSpecificCleaners()
+	cleanupTypes := make([]string, 0, len(osSpecificCleaners))
+	for name := range osSpecificCleaners {
+		cleanupTypes = append(cleanupTypes, name)
+	}
+	return cleanupTypes
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+func formatDuration(d time.Duration) (float64, string) {
+	switch {
+	case d.Seconds() < 1:
+		return d.Seconds() * 1000, "ms"
+	case d.Minutes() < 1:
+		return d.Seconds(), "s"
+	default:
+		return d.Minutes(), "m"
+	}
 }
 
 func printCleanupSummary(results []cleanupResult, totalSpaceFreed, startSpace uint64) {
@@ -235,72 +316,4 @@ func getHeatmapColor(ratio float64) (r, g, b uint8) {
 		return 0, 255, uint8(255 * (1 - 2*ratio))
 	}
 	return uint8(255 * (2*ratio - 1)), uint8(255 * (2 - 2*ratio)), 0
-}
-
-func parseFlags(excludeTypes, includeTypes string, allFlag bool) ([]string, error) {
-	switch {
-	case excludeTypes != "" && includeTypes != "":
-		return nil, fmt.Errorf("-i and -x options cannot be used together")
-	case allFlag && (excludeTypes != "" || includeTypes != ""):
-		return nil, fmt.Errorf("--all option cannot be used with -i or -x")
-	case !allFlag && excludeTypes == "" && includeTypes == "":
-		return nil, fmt.Errorf("no cleanup types specified")
-	}
-
-	cleanupTypes := cleaners.GetAllCleanupTypes()
-	var typesToRun []string
-
-	if allFlag {
-		typesToRun = cleanupTypes
-	} else if includeTypes != "" {
-		for _, t := range strings.Split(includeTypes, ",") {
-			if !contains(cleanupTypes, t) {
-				return nil, fmt.Errorf("invalid cleanup type: %s", t)
-			}
-			typesToRun = append(typesToRun, t)
-		}
-	} else {
-		excludeMap := make(map[string]bool)
-		for _, t := range strings.Split(excludeTypes, ",") {
-			if !contains(cleanupTypes, t) {
-				return nil, fmt.Errorf("invalid cleanup type: %s", t)
-			}
-			excludeMap[t] = true
-		}
-		for _, t := range cleanupTypes {
-			if !excludeMap[t] {
-				typesToRun = append(typesToRun, t)
-			}
-		}
-	}
-
-	return typesToRun, nil
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
-func needsConfirmation(cleanupType string) bool {
-	cleaner, ok := cleaners.GetCleaner(cleanupType)
-	if !ok {
-		return false
-	}
-	return cleaner.RequiresConfirmation
-}
-
-func formatDuration(d time.Duration) (float64, string) {
-	switch {
-	case d.Seconds() < 1:
-		return d.Seconds() * 1000, "ms"
-	case d.Minutes() < 1:
-		return d.Seconds(), "s"
-	default:
-		return d.Minutes(), "m"
-	}
 }
