@@ -1,4 +1,4 @@
-# Broom - System Cleanup Utility
+# 🧹 Broom - System Cleanup Utility
 
 Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems that helps you free up disk space by removing unnecessary files and cleaning up various system components. It is work in progress, and has been tested only on Debian/Ubuntu/Pop!_OS etc., but should work reasonably well on other Linux distributions.
 
