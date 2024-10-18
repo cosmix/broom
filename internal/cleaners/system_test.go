@@ -80,7 +80,7 @@ func TestRemoveOldKernels(t *testing.T) {
 	}
 }
 
-func TestRemoveUnnecessaryPackages(t *testing.T) {
+func TestClearApt(t *testing.T) {
 	mock, _ := setupTest()
 
 	callCount := 0
@@ -95,39 +95,23 @@ func TestRemoveUnnecessaryPackages(t *testing.T) {
 			if command != "apt-get purge -y nano vim-tiny" {
 				t.Errorf("Unexpected command: %s", command)
 			}
+		case 3:
+			if command != "apt-get clean" {
+				t.Errorf("Unexpected command: %s", command)
+			}
 		default:
 			t.Errorf("Unexpected call to RunWithIndicator")
 		}
 		return nil
 	}
 
-	err := removeUnnecessaryPackages()
+	err := clearApt()
 	if err != nil {
-		t.Errorf("removeUnnecessaryPackages() error = %v, wantErr %v", err, false)
+		t.Errorf("clearApt() error = %v, wantErr %v", err, false)
 	}
 
-	if callCount != 2 {
-		t.Errorf("Expected 2 calls to RunWithIndicator, got %d", callCount)
-	}
-}
-
-func TestClearAptCache(t *testing.T) {
-	mock, _ := setupTest()
-
-	mock.RunWithIndicatorFunc = func(command, message string) error {
-		if command != "apt-get clean" {
-			t.Errorf("Unexpected command: %s", command)
-		}
-		return nil
-	}
-
-	err := clearAptCache()
-	if err != nil {
-		t.Errorf("clearAptCache() error = %v, wantErr %v", err, false)
-	}
-
-	if len(mock.Commands) != 1 {
-		t.Errorf("Expected 1 command, got %d", len(mock.Commands))
+	if callCount != 3 {
+		t.Errorf("Expected 3 calls to RunWithIndicator, got %d", callCount)
 	}
 }
 
@@ -194,12 +178,25 @@ func TestRemoveCrashReports(t *testing.T) {
 func TestRemoveTemp(t *testing.T) {
 	mock, _ := setupTest()
 
+	expectedCalls := []struct {
+		path string
+		args string
+	}{
+		{"/tmp", "-type f -atime +10 -delete"},
+		{"/var/tmp", "-type f -atime +10 -delete"},
+	}
+
 	callCount := 0
 	mock.RunFdOrFindFunc = func(path, args, message string, sudo bool) error {
-		callCount++
-		if (path != "/tmp" && path != "/var/tmp") || args != "-type f -atime +10 -delete" {
-			t.Errorf("Unexpected RunFdOrFind call: path=%s, args=%s", path, args)
+		if callCount >= len(expectedCalls) {
+			t.Errorf("Unexpected call to RunFdOrFind: path=%s, args=%s", path, args)
+			return nil
 		}
+		expected := expectedCalls[callCount]
+		if path != expected.path || args != expected.args {
+			t.Errorf("Unexpected RunFdOrFind call: got path=%s, args=%s; want path=%s, args=%s", path, args, expected.path, expected.args)
+		}
+		callCount++
 		return nil
 	}
 
@@ -208,8 +205,8 @@ func TestRemoveTemp(t *testing.T) {
 		t.Errorf("removeTemp() error = %v, wantErr %v", err, false)
 	}
 
-	if callCount != 2 {
-		t.Errorf("Expected 2 calls to RunFdOrFind, got %d", callCount)
+	if callCount != len(expectedCalls) {
+		t.Errorf("Expected %d calls to RunFdOrFind, got %d", len(expectedCalls), callCount)
 	}
 }
 
@@ -246,14 +243,9 @@ func TestErrorHandling(t *testing.T) {
 		t.Errorf("removeOldKernels() error = %v, wantErr %v", err, testError)
 	}
 
-	err = removeUnnecessaryPackages()
+	err = clearApt()
 	if err != testError {
-		t.Errorf("removeUnnecessaryPackages() error = %v, wantErr %v", err, testError)
-	}
-
-	err = clearAptCache()
-	if err != testError {
-		t.Errorf("clearAptCache() error = %v, wantErr %v", err, testError)
+		t.Errorf("clearApt() error = %v, wantErr %v", err, testError)
 	}
 
 	err = cleanJournalLogs()

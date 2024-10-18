@@ -8,8 +8,7 @@ import (
 
 func init() {
 	registerCleanup("kernels", Cleaner{CleanupFunc: removeOldKernels, RequiresConfirmation: false})
-	registerCleanup("packages", Cleaner{CleanupFunc: removeUnnecessaryPackages, RequiresConfirmation: false})
-	registerCleanup("apt", Cleaner{CleanupFunc: clearAptCache, RequiresConfirmation: false})
+	registerCleanup("apt", Cleaner{CleanupFunc: clearApt, RequiresConfirmation: false})
 	registerCleanup("logs", Cleaner{CleanupFunc: removeOldLogs, RequiresConfirmation: true})
 	registerCleanup("crash", Cleaner{CleanupFunc: removeCrashReports, RequiresConfirmation: true})
 	registerCleanup("temp", Cleaner{CleanupFunc: removeTemp, RequiresConfirmation: false})
@@ -20,15 +19,15 @@ func removeOldKernels() error {
 	return utils.Runner.RunWithIndicator("dpkg --list | grep linux-image | awk '{ print $2 }' | sort -V | sed -n '/'`uname -r`'/q;p' | xargs sudo apt-get -y purge", "Removing old kernels...")
 }
 
-func removeUnnecessaryPackages() error {
+func clearApt() error {
 	err := utils.Runner.RunWithIndicator("apt-get autoremove -y", "Removing unnecessary packages...")
 	if err != nil {
 		return err
 	}
-	return utils.Runner.RunWithIndicator("apt-get purge -y nano vim-tiny", "Removing non-critical packages...")
-}
-
-func clearAptCache() error {
+	err = utils.Runner.RunWithIndicator("apt-get purge -y nano vim-tiny", "Removing non-critical packages...")
+	if err != nil {
+		return err
+	}
 	return utils.Runner.RunWithIndicator("apt-get clean", "Clearing APT cache...")
 }
 
