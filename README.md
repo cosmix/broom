@@ -44,12 +44,17 @@ Options:
 - `-i`: Comma-separated list of cleanup types to include
 - `--all`: Apply all removal types
 
-Example:
+Example: Execute all cleaners except docker and snap
 ```
-sudo ./broom -x docker,snap -i snap,temp
+sudo broom -x docker,snap
 ```
 
-Note that the `-x` and `-i` options are mutually exclusive.
+Example: Execute only the cache and kernels cleaner
+```
+sudo broom -i kernels,cache
+```
+
+Note that the `-x` and `-i` options are mutually exclusive. And `-all` is mutually exclusive with all other options.
 
 ## Building
 
