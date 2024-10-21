@@ -1,0 +1,17 @@
+version: 1
+
+builds:
+  - id: broom-linux-build
+    binary: broom
+    main: ./cmd/broom
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
