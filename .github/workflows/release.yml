@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (leave empty if using branch)'
+        required: false
+      branch:
+        description: 'Branch to build (leave empty if using tag)'
+        required: false
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        goarch: [amd64, arm64]
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.inputs.tag || github.event.inputs.branch || github.ref }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22.1'
+
+    - name: Install zstd
+      run: sudo apt-get update && sudo apt-get install -y zstd
+
+    - name: Build
+      env:
+        GOOS: linux
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        go build -ldflags="-s -w" -v -o broom-linux-${{ matrix.goarch }} ./cmd/broom
+        zstd -19 broom-linux-${{ matrix.goarch }}
+
+    - name: Upload Release Assets
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        if [[ "${{ github.event_name }}" == "release" ]]; then
+          gh release upload ${{ github.ref_name }} broom-linux-${{ matrix.goarch }}.zst
+        else
+          mkdir -p artifacts
+          cp broom-linux-${{ matrix.goarch }}.zst artifacts/
+        fi
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: broom-linux-${{ matrix.goarch }}
+        path: artifacts/
+      if: github.event_name == 'workflow_dispatch'
+
+  upload_docs:
+    name: Upload Documentation
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: github.event_name == 'release'
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Upload LICENSE and README
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release upload ${{ github.ref_name }} LICENSE README.md

@@ -21,9 +21,6 @@ vendor/
 # Go workspace file
 go.work
 
-# Go module files
-go.sum
-
 # Operating system files
 .DS_Store
 Thumbs.db
