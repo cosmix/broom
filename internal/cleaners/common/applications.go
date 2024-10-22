@@ -2,6 +2,9 @@ package common
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/cosmix/broom/internal/cleaners"
 	"github.com/cosmix/broom/internal/utils"
@@ -17,30 +20,61 @@ func init() {
 	cleaners.RegisterCleanup("ruby", cleaners.Cleaner{CleanupFunc: cleanRubyGems, RequiresConfirmation: false})
 }
 
-func cleanPythonCache() error {
-	err := utils.Runner.RunFdOrFind("/home /tmp", "-type d -name __pycache__ -exec rm -rf {} +", "Removing Python cache files", true)
+func getHomeDir() string {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Printf("Warning: Error while removing Python cache files: %v\n", err)
+		fmt.Printf("Warning: Unable to get user home directory: %v\n", err)
+		return ""
 	}
-	err = utils.Runner.RunFdOrFind("/home /tmp", "-name '*.pyc' -delete", "Removing .pyc files", true)
+	return home
+}
+
+func cleanPythonCache() error {
+	homeDir := getHomeDir()
+	if homeDir == "" {
+		return fmt.Errorf("unable to determine home directory")
+	}
+
+	searchPaths := fmt.Sprintf("%s /tmp", homeDir)
+	err := utils.Runner.RunFdOrFind(searchPaths, "-type d -name __pycache__ -exec rm -rf {} + -o -name '*.pyc' -delete", "Removing Python cache files and .pyc files", true)
 	if err != nil {
-		fmt.Printf("Warning: Error while removing .pyc files: %v\n", err)
+		fmt.Printf("Warning: Error while removing Python cache files and .pyc files: %v\n", err)
 	}
 	return nil
 }
 
 func clearBrowserCaches() error {
-	err := utils.Runner.RunFdOrFind("/home", "-type d -path '*/.cache/google-chrome/Default/Cache' -exec rm -rf {}/* \\;", "Clearing Chrome cache", true)
-	if err != nil {
-		fmt.Printf("Warning: Error while clearing Chrome cache: %v\n", err)
+	homeDir := getHomeDir()
+	if homeDir == "" {
+		return fmt.Errorf("unable to determine home directory")
 	}
-	err = utils.Runner.RunFdOrFind("/home", "-type d -path '*/.cache/chromium/Default/Cache' -exec rm -rf {}/* \\;", "Clearing Chromium cache", true)
-	if err != nil {
-		fmt.Printf("Warning: Error while clearing Chromium cache: %v\n", err)
+
+	browserPaths := map[string]string{
+		"chrome":   filepath.Join(homeDir, ".cache", "google-chrome", "Default", "Cache"),
+		"chromium": filepath.Join(homeDir, ".cache", "chromium", "Default", "Cache"),
+		"firefox":  filepath.Join(homeDir, ".mozilla", "firefox"),
 	}
-	err = utils.Runner.RunFdOrFind("/home", "-type d -path '*/.mozilla/firefox/*/Cache' -exec rm -rf {}/* \\;", "Clearing Firefox cache", true)
-	if err != nil {
-		fmt.Printf("Warning: Error while clearing Firefox cache: %v\n", err)
+
+	if runtime.GOOS == "darwin" {
+		browserPaths = map[string]string{
+			"chrome":   filepath.Join(homeDir, "Library", "Caches", "Google", "Chrome"),
+			"chromium": filepath.Join(homeDir, "Library", "Caches", "Chromium"),
+			"firefox":  filepath.Join(homeDir, "Library", "Caches", "Firefox"),
+		}
+	}
+
+	for browser, path := range browserPaths {
+		if browser == "firefox" {
+			err := utils.Runner.RunFdOrFind(path, "-type d -name Cache -exec rm -rf {}/* \\;", fmt.Sprintf("Clearing %s cache", browser), true)
+			if err != nil {
+				fmt.Printf("Warning: Error while clearing %s cache: %v\n", browser, err)
+			}
+		} else {
+			err := utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", path), fmt.Sprintf("Clearing %s cache", browser))
+			if err != nil {
+				fmt.Printf("Warning: Error while clearing %s cache: %v\n", browser, err)
+			}
+		}
 	}
 	return nil
 }
@@ -54,7 +88,12 @@ func cleanNpmCache() error {
 }
 
 func cleanGradleCache() error {
-	return utils.Runner.RunWithIndicator("rm -rf $HOME/.gradle/caches", "Cleaning Gradle cache")
+	homeDir := getHomeDir()
+	if homeDir == "" {
+		return fmt.Errorf("unable to determine home directory")
+	}
+	gradleCachePath := filepath.Join(homeDir, ".gradle", "caches")
+	return utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s", gradleCachePath), "Cleaning Gradle cache")
 }
 
 func cleanComposerCache() error {
@@ -66,7 +105,17 @@ func cleanComposerCache() error {
 }
 
 func cleanElectronCache() error {
-	err := utils.Runner.RunFdOrFind("/home", "-type d -path '*/.config/*electron*' -exec rm -rf {}/* \\;", "Clearing Electron cache", true)
+	homeDir := getHomeDir()
+	if homeDir == "" {
+		return fmt.Errorf("unable to determine home directory")
+	}
+
+	electronPath := filepath.Join(homeDir, ".config")
+	if runtime.GOOS == "darwin" {
+		electronPath = filepath.Join(homeDir, "Library", "Application Support")
+	}
+
+	err := utils.Runner.RunFdOrFind(electronPath, "-type d -path '*electron*' -exec rm -rf {}/* \\;", "Clearing Electron cache", true)
 	if err != nil {
 		fmt.Printf("Warning: Error while clearing Electron cache: %v\n", err)
 	}
