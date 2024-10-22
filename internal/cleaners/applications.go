@@ -36,6 +36,11 @@ func init() {
 	registerCleanup("r_packages", Cleaner{CleanupFunc: cleanRPackagesCache(utils.CommandExists), RequiresConfirmation: true})
 	registerCleanup("julia_packages", Cleaner{CleanupFunc: cleanJuliaPackagesCache(utils.CommandExists), RequiresConfirmation: true})
 	registerCleanup("conda", Cleaner{CleanupFunc: cleanUnusedCondaEnvironments(utils.CommandExists), RequiresConfirmation: true})
+	registerCleanup("mercurial", Cleaner{CleanupFunc: cleanMercurialBackups(utils.CommandExists), RequiresConfirmation: true})
+	registerCleanup("git_lfs", Cleaner{CleanupFunc: cleanGitLFSCache(utils.CommandExists), RequiresConfirmation: true})
+	registerCleanup("cmake", Cleaner{CleanupFunc: cleanCMakeBuildDirs, RequiresConfirmation: true})
+	registerCleanup("autotools", Cleaner{CleanupFunc: cleanAutotoolsFiles, RequiresConfirmation: true})
+	registerCleanup("ccache", Cleaner{CleanupFunc: cleanCCache(utils.CommandExists), RequiresConfirmation: true})
 }
 
 func cleanDocker(commandExists utils.CommandExistsFunc) func() error {
@@ -389,6 +394,95 @@ func cleanUnusedCondaEnvironments(commandExists utils.CommandExistsFunc) func() 
 					}
 				}
 			}
+		}
+
+		return nil
+	}
+}
+func cleanMercurialBackups(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if !commandExists("hg") {
+			fmt.Println("Mercurial cleanup: Skipped (not installed)")
+			return nil
+		}
+
+		err := utils.Runner.RunFdOrFind("/home", "-type f -name '*.hg*.bak' -delete", "Removing Mercurial backup files", true)
+		if err != nil {
+			fmt.Printf("Warning: Error while removing Mercurial backup files: %v\n", err)
+		}
+
+		bundlesPath := "$HOME/.hg/bundle-backup"
+		err = utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", bundlesPath), "Removing Mercurial bundle backups")
+		if err != nil {
+			fmt.Printf("Warning: Error while removing Mercurial bundle backups: %v\n", err)
+		}
+
+		return nil
+	}
+}
+
+func cleanGitLFSCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if !commandExists("git-lfs") {
+			fmt.Println("Git LFS cleanup: Skipped (not installed)")
+			return nil
+		}
+
+		err := utils.Runner.RunWithIndicator("git lfs prune", "Cleaning Git LFS cache")
+		if err != nil {
+			return fmt.Errorf("failed to clean Git LFS cache: %v", err)
+		}
+
+		return nil
+	}
+}
+
+func cleanCMakeBuildDirs() error {
+	err := utils.Runner.RunFdOrFind("/home", "-type d -name 'build' -exec test -f '{}/CMakeCache.txt' \\; -exec rm -rf {} \\;", "Removing old CMake build directories", true)
+	if err != nil {
+		fmt.Printf("Warning: Error while removing CMake build directories: %v\n", err)
+	}
+
+	err = utils.Runner.RunFdOrFind("/home", "-type d -name 'CMakeFiles' -exec rm -rf {} \\;", "Removing CMakeFiles directories", true)
+	if err != nil {
+		fmt.Printf("Warning: Error while removing CMakeFiles directories: %v\n", err)
+	}
+
+	return nil
+}
+
+func cleanAutotoolsFiles() error {
+	patterns := []string{
+		"autom4te.cache",
+		"config.status",
+		"config.log",
+		"configure~",
+		"Makefile.in",
+		"aclocal.m4",
+		".deps",
+		".libs",
+	}
+
+	for _, pattern := range patterns {
+		err := utils.Runner.RunFdOrFind("/home", fmt.Sprintf("-type d,f -name '%s' -exec rm -rf {} \\;", pattern), fmt.Sprintf("Removing Autotools generated %s", pattern), true)
+		if err != nil {
+			fmt.Printf("Warning: Error while removing Autotools %s: %v\n", pattern, err)
+		}
+	}
+
+	return nil
+}
+
+func cleanCCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if !commandExists("ccache") {
+			fmt.Println("ccache cleanup: Skipped (not installed)")
+			return nil
+		}
+
+		err := utils.Runner.RunWithIndicator("ccache -C", "Clearing ccache")
+		if err != nil {
+			return fmt.Errorf("failed to clear ccache: %v", err)
 		}
 
 		return nil
