@@ -13,8 +13,8 @@ on:
         required: false
 
 jobs:
-  build:
-    name: Build and Release
+  build-linux:
+    name: Build Linux Binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34,7 +34,7 @@ jobs:
     - name: Install zstd
       run: sudo apt-get update && sudo apt-get install -y zstd
 
-    - name: Build
+    - name: Build Linux Binary
       env:
         GOOS: linux
         GOARCH: ${{ matrix.goarch }}
@@ -42,7 +42,7 @@ jobs:
         go build -ldflags="-s -w" -v -o broom-linux-${{ matrix.goarch }} ./cmd/broom
         zstd -19 broom-linux-${{ matrix.goarch }}
 
-    - name: Upload Release Assets
+    - name: Upload Linux Binary
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
@@ -50,7 +50,7 @@ jobs:
           gh release upload ${{ github.ref_name }} broom-linux-${{ matrix.goarch }}.zst
         else
           mkdir -p artifacts
-          cp broom-linux-${{ matrix.goarch }}.zst artifacts/
+          mv broom-linux-${{ matrix.goarch }}.zst artifacts/
         fi
 
     - name: Upload Artifacts
@@ -60,9 +60,52 @@ jobs:
         path: artifacts/
       if: github.event_name == 'workflow_dispatch'
 
+  build-macos:
+    name: Build macOS Universal Binary
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.inputs.tag || github.event.inputs.branch || github.ref }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22.1'
+
+    - name: Install zstd
+      run: brew install zstd
+
+    - name: Build macOS Binaries and Create Universal Binary
+      run: |
+        GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -v -o broom-darwin-amd64 ./cmd/broom
+        GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -v -o broom-darwin-arm64 ./cmd/broom
+        lipo -create -output broom-darwin-universal broom-darwin-amd64 broom-darwin-arm64
+        zstd -19 broom-darwin-universal
+
+    - name: Upload macOS Universal Binary
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        if [[ "${{ github.event_name }}" == "release" ]]; then
+          gh release upload ${{ github.ref_name }} broom-darwin-universal.zst
+        else
+          mkdir -p artifacts
+          mv broom-darwin-universal.zst artifacts/
+        fi
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: broom-darwin-universal
+        path: artifacts/
+      if: github.event_name == 'workflow_dispatch'
+
   upload_docs:
     name: Upload Documentation
-    needs: build
+    needs: [build-linux, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
