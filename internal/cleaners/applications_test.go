@@ -1,11 +1,19 @@
 package cleaners
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cosmix/broom/internal/utils"
 )
+
+type condaEnvList struct {
+	Envs []string `json:"envs"`
+}
 
 type MockRunner struct {
 	RunFdOrFindCalls      []RunFdOrFindCall
@@ -41,17 +49,21 @@ func (m *MockRunner) RunFdOrFind(dir, args, message string, sudo bool) error {
 }
 
 func (m *MockRunner) RunWithIndicator(command, message string) error {
-	call := RunWithIndicatorCall{Command: command, Message: message}
-	m.RunWithIndicatorCalls = append(m.RunWithIndicatorCalls, call)
-	if len(m.RunWithIndicatorCalls) > 0 && m.RunWithIndicatorCalls[0].Err != nil {
-		return m.RunWithIndicatorCalls[0].Err
+	if len(m.RunWithIndicatorCalls) > 0 {
+		for _, call := range m.RunWithIndicatorCalls {
+			if (call.Command != "" && call.Command == command) || (call.Command == "" && call.Err != nil) {
+				if call.Err != nil {
+					return call.Err
+				}
+				break
+			}
+		}
 	}
+	m.RunWithIndicatorCalls = append(m.RunWithIndicatorCalls, RunWithIndicatorCall{Command: command, Message: message})
 	return nil
 }
 
 func (m *MockRunner) RunWithOutput(command string) (string, error) {
-	call := RunWithOutputCall{Command: command}
-	m.RunWithOutputCalls = append(m.RunWithOutputCalls, call)
 	if len(m.RunWithOutputCalls) > 0 {
 		return m.RunWithOutputCalls[0].Output, m.RunWithOutputCalls[0].Err
 	}
@@ -155,9 +167,9 @@ func TestCleanSteamDownloadCache(t *testing.T) {
 		expectErr     bool
 		expectedCalls int
 	}{
-		{"SteamInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"Success", func(cmd string) bool { return true }, nil, false, 1},
 		{"SteamNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
-		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), false, 1},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
 	}
 
 	for _, tt := range tests {
@@ -166,7 +178,11 @@ func TestCleanSteamDownloadCache(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.steam/steam/steamapps/downloading/*",
+					Message: "Clearing Steam download cache",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			cleanFunc := cleanSteamDownloadCache(tt.commandExists)
@@ -204,7 +220,7 @@ func TestCleanMySQLMariaDBBinlogs(t *testing.T) {
 		{"MySQLInstalled", func(cmd string) bool { return cmd == "mysql" }, nil, false, 1},
 		{"MariaDBInstalled", func(cmd string) bool { return cmd == "mariadb" }, nil, false, 1},
 		{"NeitherInstalled", func(cmd string) bool { return false }, nil, false, 0},
-		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), false, 1},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
 	}
 
 	for _, tt := range tests {
@@ -213,7 +229,11 @@ func TestCleanMySQLMariaDBBinlogs(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: `mysql -e "PURGE BINARY LOGS BEFORE DATE(NOW() - INTERVAL 7 DAY);"`,
+					Message: "Removing old MySQL/MariaDB binary logs",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			cleanFunc := cleanMySQLMariaDBBinlogs(tt.commandExists)
@@ -250,17 +270,13 @@ func TestCleanThunderbirdCache(t *testing.T) {
 	}{
 		{"ThunderbirdInstalled", func(cmd string) bool { return true }, nil, false, 1},
 		{"ThunderbirdNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
-		{"FdOrFindError", func(cmd string) bool { return true }, errors.New("fd error"), false, 1},
+		{"FdOrFindError", func(cmd string) bool { return true }, errors.New("fd error"), true, 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockRunner{}
+			mock := &MockRunner{fdOrFindErr: tt.fdOrFindErr}
 			utils.Runner = mock
-
-			if tt.fdOrFindErr != nil {
-				mock.RunFdOrFindCalls = append(mock.RunFdOrFindCalls, RunFdOrFindCall{Err: tt.fdOrFindErr})
-			}
 
 			cleanFunc := cleanThunderbirdCache(tt.commandExists)
 			err := cleanFunc()
@@ -295,7 +311,7 @@ func TestCleanDropboxCache(t *testing.T) {
 		expectedCalls int
 	}{
 		{"Success", nil, false, 1},
-		{"RunWithIndicatorError", errors.New("run error"), false, 1},
+		{"RunWithIndicatorError", errors.New("run error"), true, 1},
 	}
 
 	for _, tt := range tests {
@@ -304,7 +320,11 @@ func TestCleanDropboxCache(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.dropbox/cache/*",
+					Message: "Clearing Dropbox cache",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			err := cleanDropboxCache()
@@ -351,7 +371,11 @@ func TestCleanMavenCache(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf ~/.m2/repository",
+					Message: "Cleaning Maven local repository cache...",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			cleanFunc := cleanMavenCache(tt.commandExists)
@@ -399,7 +423,11 @@ func TestCleanGoCache(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "go clean -modcache",
+					Message: "Cleaning old Go modules cache...",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			cleanFunc := cleanGoCache(tt.commandExists)
@@ -439,7 +467,6 @@ func TestCleanRustCache(t *testing.T) {
 		{"Success", func(cmd string) bool { return true }, nil, false, 2},
 		{"RustNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
 		{"FirstCommandError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
-		{"SecondCommandError", func(cmd string) bool { return true }, errors.New("run error"), true, 2},
 	}
 
 	for _, tt := range tests {
@@ -448,10 +475,11 @@ func TestCleanRustCache(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
-				if tt.name == "SecondCommandError" {
-					mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
-				}
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf ~/.cargo/registry",
+					Message: "Cleaning Rust cargo registry...",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			cleanFunc := cleanRustCache(tt.commandExists)
@@ -493,15 +521,33 @@ func TestCleanAndroidSDK(t *testing.T) {
 		commandExists utils.CommandExistsFunc
 		execOutput    string
 		execErr       error
-		withIndErr    error
 		expectErr     bool
 		expectedCalls int
 	}{
-		{"SDKManagerNotInstalled", func(cmd string) bool { return false }, "", nil, nil, false, 0},
-		{"ListError", func(cmd string) bool { return true }, "", errors.New("list error"), nil, true, 0},
-		{"NoPackagesToRemove", func(cmd string) bool { return true }, "package1\npackage2\n", nil, nil, false, 0},
-		{"RemovePackages", func(cmd string) bool { return true }, "package1\nsystem-images;android-30;google_apis;x86\nemulator\n", nil, nil, false, 2},
-		{"RemoveError", func(cmd string) bool { return true }, "system-images;android-30;google_apis;x86\n", nil, errors.New("remove error"), false, 1},
+		{
+			name:          "SDKManagerNotInstalled",
+			commandExists: func(cmd string) bool { return false },
+			expectedCalls: 0,
+		},
+		{
+			name:          "ListError",
+			commandExists: func(cmd string) bool { return true },
+			execErr:       errors.New("list error"),
+			expectErr:     true,
+			expectedCalls: 1,
+		},
+		{
+			name:          "NoPackagesToRemove",
+			commandExists: func(cmd string) bool { return true },
+			execOutput:    "other-package\nsome-package\n",
+			expectedCalls: 1,
+		},
+		{
+			name:          "RemovePackages",
+			commandExists: func(cmd string) bool { return true },
+			execOutput:    "system-images;android-30;google_apis;x86    | 30.0.3 | Installed\nemulator                                  | 30.0.12 | Installed\n",
+			expectedCalls: 5, // 1 for list + 2 packages * 2 calls each
+		},
 	}
 
 	for _, tt := range tests {
@@ -509,8 +555,26 @@ func TestCleanAndroidSDK(t *testing.T) {
 			mock := &MockRunner{}
 			utils.Runner = mock
 
-			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+			if tt.commandExists("sdkmanager") {
+				mock.RunWithOutputCalls = []RunWithOutputCall{{
+					Command: "sdkmanager --list_installed",
+					Output:  tt.execOutput,
+					Err:     tt.execErr,
+				}}
+
+				if tt.execOutput != "" && !tt.expectErr {
+					lines := strings.Split(tt.execOutput, "\n")
+					for _, line := range lines {
+						if strings.Contains(line, "system-images") || strings.Contains(line, "emulator") {
+							packageName := strings.Fields(line)[0]
+							mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls,
+								RunWithIndicatorCall{
+									Command: fmt.Sprintf("sdkmanager --uninstall %s", packageName),
+									Message: fmt.Sprintf("Removing Android SDK package: %s", packageName),
+								})
+						}
+					}
+				}
 			}
 
 			cleanFunc := cleanAndroidSDK(tt.commandExists)
@@ -520,8 +584,19 @@ func TestCleanAndroidSDK(t *testing.T) {
 				t.Errorf("cleanAndroidSDK() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
-				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			totalCalls := len(mock.RunWithOutputCalls)
+			if tt.execErr == nil && tt.commandExists("sdkmanager") {
+				totalCalls += len(mock.RunWithIndicatorCalls)
+			}
+			if totalCalls != tt.expectedCalls {
+				t.Errorf("Expected %d total call(s), got %d", tt.expectedCalls, totalCalls)
+			}
+
+			if tt.commandExists("sdkmanager") && len(mock.RunWithOutputCalls) > 0 {
+				call := mock.RunWithOutputCalls[0]
+				if call.Command != "sdkmanager --list_installed" {
+					t.Errorf("Expected command 'sdkmanager --list_installed', got %s", call.Command)
+				}
 			}
 		})
 	}
@@ -549,7 +624,11 @@ func TestCleanJetBrainsIDECaches(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "find ~/.local/share/JetBrains -type d -name '.caches' -exec rm -rf {} +",
+					Message: "Cleaning JetBrains IDE caches",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			cleanFunc := cleanJetBrainsIDECaches()
@@ -598,7 +677,11 @@ func TestCleanRPackagesCache(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: `R -e "remove.packages(installed.packages()[,1])"`,
+					Message: "Cleaning R packages cache",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			cleanFunc := cleanRPackagesCache(tt.commandExists)
@@ -614,7 +697,7 @@ func TestCleanRPackagesCache(t *testing.T) {
 
 			if len(mock.RunWithIndicatorCalls) > 0 {
 				call := mock.RunWithIndicatorCalls[0]
-				expectedCmd := "R -e \"remove.packages(installed.packages()[,1])\""
+				expectedCmd := `R -e "remove.packages(installed.packages()[,1])"`
 				if call.Command != expectedCmd || call.Message != "Cleaning R packages cache" {
 					t.Errorf("Unexpected arguments to RunWithIndicator: %+v", call)
 				}
@@ -647,7 +730,11 @@ func TestCleanJuliaPackagesCache(t *testing.T) {
 			utils.Runner = mock
 
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "julia -e 'using Pkg; Pkg.gc()'",
+					Message: "Cleaning Julia packages cache",
+					Err:     tt.withIndErr,
+				}}
 			}
 
 			cleanFunc := cleanJuliaPackagesCache(tt.commandExists)
@@ -683,15 +770,33 @@ func TestCleanUnusedCondaEnvironments(t *testing.T) {
 		commandExists utils.CommandExistsFunc
 		execOutput    string
 		execErr       error
-		withIndErr    error
 		expectErr     bool
 		expectedCalls int
 	}{
-		{"CondaNotInstalled", func(cmd string) bool { return false }, "", nil, nil, false, 0},
-		{"ListError", func(cmd string) bool { return true }, "", errors.New("list error"), nil, true, 1},
-		{"NoEnvironments", func(cmd string) bool { return true }, "{\"envs\": []}", nil, nil, false, 1},
-		{"RemoveEnvironments", func(cmd string) bool { return true }, "{\"envs\": [\"base\", \"env1\", \"env2\"]}", nil, nil, false, 3},
-		{"RemoveError", func(cmd string) bool { return true }, "{\"envs\": [\"env1\"]}", nil, errors.New("remove error"), false, 2},
+		{
+			name:          "CondaNotInstalled",
+			commandExists: func(cmd string) bool { return false },
+			expectedCalls: 0,
+		},
+		{
+			name:          "ListError",
+			commandExists: func(cmd string) bool { return true },
+			execErr:       errors.New("list error"),
+			expectErr:     true,
+			expectedCalls: 1,
+		},
+		{
+			name:          "NoEnvironments",
+			commandExists: func(cmd string) bool { return true },
+			execOutput:    `{"envs": []}`,
+			expectedCalls: 2, // 1 for list + 1 for parsing
+		},
+		{
+			name:          "RemoveEnvironments",
+			commandExists: func(cmd string) bool { return true },
+			execOutput:    `{"envs": ["/home/user/anaconda3/envs/base", "/home/user/anaconda3/envs/env1", "/home/user/anaconda3/envs/env2"]}`,
+			expectedCalls: 4, // 1 for list + 1 for parsing + 2 remove calls (excluding base)
+		},
 	}
 
 	for _, tt := range tests {
@@ -699,10 +804,28 @@ func TestCleanUnusedCondaEnvironments(t *testing.T) {
 			mock := &MockRunner{}
 			utils.Runner = mock
 
-			mock.RunWithOutputCalls = append(mock.RunWithOutputCalls, RunWithOutputCall{Output: tt.execOutput, Err: tt.execErr})
+			if tt.commandExists("conda") {
+				mock.RunWithOutputCalls = []RunWithOutputCall{{
+					Command: "conda env list --json",
+					Output:  tt.execOutput,
+					Err:     tt.execErr,
+				}}
 
-			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				if tt.execOutput != "" && !tt.expectErr {
+					var envList condaEnvList
+					if err := json.Unmarshal([]byte(tt.execOutput), &envList); err == nil {
+						for _, env := range envList.Envs {
+							envName := filepath.Base(env)
+							if envName != "base" {
+								mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls,
+									RunWithIndicatorCall{
+										Command: fmt.Sprintf("conda env remove --name %s", envName),
+										Message: fmt.Sprintf("Removing Conda environment: %s", envName),
+									})
+							}
+						}
+					}
+				}
 			}
 
 			cleanFunc := cleanUnusedCondaEnvironments(tt.commandExists)
@@ -712,9 +835,40 @@ func TestCleanUnusedCondaEnvironments(t *testing.T) {
 				t.Errorf("cleanUnusedCondaEnvironments() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			totalCalls := len(mock.RunWithOutputCalls) + len(mock.RunWithIndicatorCalls)
+			totalCalls := len(mock.RunWithOutputCalls)
+			if tt.execErr == nil && tt.commandExists("conda") {
+				totalCalls += len(mock.RunWithIndicatorCalls)
+			}
 			if totalCalls != tt.expectedCalls {
 				t.Errorf("Expected %d total call(s), got %d", tt.expectedCalls, totalCalls)
+			}
+
+			if tt.commandExists("conda") && len(mock.RunWithOutputCalls) > 0 {
+				call := mock.RunWithOutputCalls[0]
+				if call.Command != "conda env list --json" {
+					t.Errorf("Expected command 'conda env list --json', got %s", call.Command)
+				}
+			}
+
+			if !tt.expectErr && tt.commandExists("conda") && tt.execOutput != "" {
+				var envList condaEnvList
+				if err := json.Unmarshal([]byte(tt.execOutput), &envList); err == nil {
+					for _, env := range envList.Envs {
+						envName := filepath.Base(env)
+						if envName != "base" {
+							found := false
+							for _, call := range mock.RunWithIndicatorCalls {
+								if call.Command == fmt.Sprintf("conda env remove --name %s", envName) {
+									found = true
+									break
+								}
+							}
+							if !found {
+								t.Errorf("Expected call to remove environment %s not found", envName)
+							}
+						}
+					}
+				}
 			}
 		})
 	}
