@@ -21,14 +21,37 @@ Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems
 - Remove old Ruby gems
 - Clean up Python cache files
 - Remove LibreOffice cache
-- Clear browser caches
-- Clean package manager caches
+- Clear browser caches (Chrome, Chromium, Firefox)
+- Clean package manager caches (APT, YUM, DNF)
 - Clean npm cache
 - Clean Gradle cache
 - Clean Composer cache
 - Remove old Wine prefixes
 - Clean up old Electron apps cache
 - Remove old Virtualbox disk images
+- Clean Kdenlive render files
+- Clean Blender temporary files
+- Clean Steam download cache
+- Clean MySQL/MariaDB binary logs
+- Clean Thunderbird cache
+- Clean Dropbox cache
+- Clean Maven cache
+- Clean Go modules cache
+- Clean Rust cargo cache
+- Clean Android SDK packages
+- Clean JetBrains IDE caches
+- Clean R packages cache
+- Clean Julia packages cache
+- Clean unused Conda environments
+- Clean LXC/LXD images and containers
+- Clean Podman images and containers
+- Clean Vagrant boxes and entries
+- Clean Buildah images
+- Clean Mercurial backup files and bundles
+- Clean Git LFS cache
+- Clean CMake build directories
+- Clean Autotools generated files
+- Clean ccache
 - Use `fd` for faster file searching when available, with fallback to `find`
 
 Broom asks you for confirmation whenever it's about to perform a potentially destructive operation. You can choose to include or exclude specific 'cleaners' based on your requirements. At the end of a brooming session you will be presented with a summary of the cleanup operations performed, and their characteristics.

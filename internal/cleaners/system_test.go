@@ -4,27 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
-
-	"github.com/cosmix/broom/internal/utils"
 )
-
-// MockUtilsRunner implements utils.UtilsRunner for testing
-type MockUtilsRunner struct {
-	RunWithIndicatorFunc func(command, message string) error
-	RunFdOrFindFunc      func(path, args, message string, sudo bool) error
-	Commands             []string
-}
-
-func (m *MockUtilsRunner) RunWithIndicator(command, message string) error {
-	m.Commands = append(m.Commands, command)
-	return m.RunWithIndicatorFunc(command, message)
-}
-
-func (m *MockUtilsRunner) RunFdOrFind(path, args, message string, sudo bool) error {
-	command := "fd/find " + path + " " + args
-	m.Commands = append(m.Commands, command)
-	return m.RunFdOrFindFunc(path, args, message, sudo)
-}
 
 // FakeEnvironment represents a fake system environment for testing
 type FakeEnvironment struct {
@@ -33,13 +13,8 @@ type FakeEnvironment struct {
 	Files             map[string][]string // map of directory to files
 }
 
-func setupTest() (*MockUtilsRunner, *FakeEnvironment) {
-	mock := &MockUtilsRunner{
-		RunWithIndicatorFunc: func(command, message string) error { return nil },
-		RunFdOrFindFunc:      func(path, args, message string, sudo bool) error { return nil },
-	}
-	utils.SetUtilsRunner(mock)
-
+func setupTestWithEnv() (*MockUtilsRunner, *FakeEnvironment) {
+	mock := setupTest()
 	env := &FakeEnvironment{
 		InstalledKernels:  []string{"linux-image-5.4.0-42-generic", "linux-image-5.4.0-45-generic", "linux-image-5.4.0-47-generic"},
 		InstalledPackages: []string{"nano", "vim-tiny", "other-package"},
@@ -56,7 +31,7 @@ func setupTest() (*MockUtilsRunner, *FakeEnvironment) {
 }
 
 func TestRemoveOldKernels(t *testing.T) {
-	mock, env := setupTest()
+	mock, env := setupTestWithEnv()
 
 	mock.RunWithIndicatorFunc = func(command, message string) error {
 		if !strings.Contains(command, "dpkg --list | grep linux-image") {
@@ -81,7 +56,7 @@ func TestRemoveOldKernels(t *testing.T) {
 }
 
 func TestClearApt(t *testing.T) {
-	mock, _ := setupTest()
+	mock, _ := setupTestWithEnv()
 
 	callCount := 0
 	mock.RunWithIndicatorFunc = func(command, message string) error {
@@ -116,7 +91,7 @@ func TestClearApt(t *testing.T) {
 }
 
 func TestRemoveOldLogs(t *testing.T) {
-	mock, _ := setupTest()
+	mock, _ := setupTestWithEnv()
 
 	callCount := 0
 	mock.RunWithIndicatorFunc = func(command, message string) error {
@@ -146,7 +121,7 @@ func TestRemoveOldLogs(t *testing.T) {
 }
 
 func TestRemoveCrashReports(t *testing.T) {
-	mock, _ := setupTest()
+	mock, _ := setupTestWithEnv()
 
 	callCount := 0
 	mock.RunWithIndicatorFunc = func(command, message string) error {
@@ -176,7 +151,7 @@ func TestRemoveCrashReports(t *testing.T) {
 }
 
 func TestRemoveTemp(t *testing.T) {
-	mock, _ := setupTest()
+	mock, _ := setupTestWithEnv()
 
 	expectedCalls := []struct {
 		path string
@@ -211,7 +186,7 @@ func TestRemoveTemp(t *testing.T) {
 }
 
 func TestCleanJournalLogs(t *testing.T) {
-	mock, _ := setupTest()
+	mock, _ := setupTestWithEnv()
 
 	mock.RunWithIndicatorFunc = func(command, message string) error {
 		if command != "journalctl --vacuum-size=100M" {
@@ -231,7 +206,7 @@ func TestCleanJournalLogs(t *testing.T) {
 }
 
 func TestErrorHandling(t *testing.T) {
-	mock, _ := setupTest()
+	mock, _ := setupTestWithEnv()
 
 	testError := errors.New("test error")
 	mock.RunWithIndicatorFunc = func(command, message string) error {

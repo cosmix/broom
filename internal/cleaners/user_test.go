@@ -3,51 +3,9 @@ package cleaners
 import (
 	"errors"
 	"testing"
-
-	"github.com/cosmix/broom/internal/utils"
 )
 
-type MockRunner struct {
-	RunFdOrFindCalls      []RunFdOrFindCall
-	RunWithIndicatorCalls []RunWithIndicatorCall
-}
-
-type RunFdOrFindCall struct {
-	Dir     string
-	Args    string
-	Message string
-	Sudo    bool
-	Err     error
-}
-
-type RunWithIndicatorCall struct {
-	Command string
-	Message string
-	Err     error
-}
-
-func (m *MockRunner) RunFdOrFind(dir, args, message string, sudo bool) error {
-	call := RunFdOrFindCall{Dir: dir, Args: args, Message: message, Sudo: sudo}
-	m.RunFdOrFindCalls = append(m.RunFdOrFindCalls, call)
-	if len(m.RunFdOrFindCalls) > 0 && m.RunFdOrFindCalls[0].Err != nil {
-		return m.RunFdOrFindCalls[0].Err
-	}
-	return nil
-}
-
-func (m *MockRunner) RunWithIndicator(command, message string) error {
-	call := RunWithIndicatorCall{Command: command, Message: message}
-	m.RunWithIndicatorCalls = append(m.RunWithIndicatorCalls, call)
-	if len(m.RunWithIndicatorCalls) > 0 && m.RunWithIndicatorCalls[0].Err != nil {
-		return m.RunWithIndicatorCalls[0].Err
-	}
-	return nil
-}
-
 func TestCleanHomeDirectory(t *testing.T) {
-	originalRunner := utils.Runner
-	defer func() { utils.Runner = originalRunner }()
-
 	tests := []struct {
 		name          string
 		fdOrFindErr   error
@@ -56,20 +14,22 @@ func TestCleanHomeDirectory(t *testing.T) {
 		expectedCalls int
 	}{
 		{"Success", nil, nil, false, 2},
-		{"FdOrFindError", errors.New("fd error"), nil, false, 3},
-		{"RunWithIndError", nil, errors.New("run error"), true, 3},
+		{"FdOrFindError", errors.New("fd error"), nil, false, 2},
+		{"RunWithIndError", nil, errors.New("run error"), true, 2},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockRunner{}
-			utils.Runner = mock
-
+			mock := setupTest()
 			if tt.fdOrFindErr != nil {
-				mock.RunFdOrFindCalls = append(mock.RunFdOrFindCalls, RunFdOrFindCall{Err: tt.fdOrFindErr})
+				mock.RunFdOrFindFunc = func(path, args, message string, sudo bool) error {
+					return tt.fdOrFindErr
+				}
 			}
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorFunc = func(command, message string) error {
+					return tt.withIndErr
+				}
 			}
 
 			err := cleanHomeDirectory()
@@ -78,23 +38,21 @@ func TestCleanHomeDirectory(t *testing.T) {
 				t.Errorf("cleanHomeDirectory() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			totalCalls := len(mock.RunFdOrFindCalls) + len(mock.RunWithIndicatorCalls)
-			if totalCalls != tt.expectedCalls {
-				t.Errorf("Expected %d calls, got %d", tt.expectedCalls, totalCalls)
+			if len(mock.Commands) != tt.expectedCalls {
+				t.Errorf("Expected %d calls, got %d", tt.expectedCalls, len(mock.Commands))
 			}
 
-			if len(mock.RunFdOrFindCalls) > 0 {
-				call := mock.RunFdOrFindCalls[len(mock.RunFdOrFindCalls)-1]
-				if call.Dir != "/home" || call.Args != "-type f \\( -name '*.tmp' -o -name '*.temp' -o -name '*.swp' -o -name '*~' \\) -delete" ||
-					call.Message != "Removing temporary files in home directory..." || !call.Sudo {
-					t.Errorf("Unexpected arguments to RunFdOrFind: %+v", call)
+			if len(mock.Commands) > 0 {
+				expectedFdCmd := "fd/find /home -type f \\( -name '*.tmp' -o -name '*.temp' -o -name '*.swp' -o -name '*~' \\) -delete"
+				if mock.Commands[0] != expectedFdCmd {
+					t.Errorf("Unexpected fd command: got %s, want %s", mock.Commands[0], expectedFdCmd)
 				}
-			}
 
-			if len(mock.RunWithIndicatorCalls) > 0 {
-				call := mock.RunWithIndicatorCalls[len(mock.RunWithIndicatorCalls)-1]
-				if call.Command != "rm -rf /home/*/.cache/thumbnails/*" || call.Message != "Clearing thumbnail cache..." {
-					t.Errorf("Unexpected arguments to RunWithIndicator: %+v", call)
+				if len(mock.Commands) > 1 {
+					expectedRmCmd := "rm -rf /home/*/.cache/thumbnails/*"
+					if mock.Commands[1] != expectedRmCmd {
+						t.Errorf("Unexpected rm command: got %s, want %s", mock.Commands[1], expectedRmCmd)
+					}
 				}
 			}
 		})
@@ -102,9 +60,6 @@ func TestCleanHomeDirectory(t *testing.T) {
 }
 
 func TestCleanUserCaches(t *testing.T) {
-	originalRunner := utils.Runner
-	defer func() { utils.Runner = originalRunner }()
-
 	tests := []struct {
 		name          string
 		fdOrFindErr   error
@@ -112,16 +67,16 @@ func TestCleanUserCaches(t *testing.T) {
 		expectedCalls int
 	}{
 		{"Success", nil, false, 1},
-		{"Error", errors.New("fd error"), false, 2},
+		{"Error", errors.New("fd error"), false, 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockRunner{}
-			utils.Runner = mock
-
+			mock := setupTest()
 			if tt.fdOrFindErr != nil {
-				mock.RunFdOrFindCalls = append(mock.RunFdOrFindCalls, RunFdOrFindCall{Err: tt.fdOrFindErr})
+				mock.RunFdOrFindFunc = func(path, args, message string, sudo bool) error {
+					return tt.fdOrFindErr
+				}
 			}
 
 			err := cleanUserCaches()
@@ -130,15 +85,14 @@ func TestCleanUserCaches(t *testing.T) {
 				t.Errorf("cleanUserCaches() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			if len(mock.RunFdOrFindCalls) != tt.expectedCalls {
-				t.Errorf("Expected %d call(s) to RunFdOrFind, got %d", tt.expectedCalls, len(mock.RunFdOrFindCalls))
+			if len(mock.Commands) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s), got %d", tt.expectedCalls, len(mock.Commands))
 			}
 
-			if len(mock.RunFdOrFindCalls) > 0 {
-				call := mock.RunFdOrFindCalls[len(mock.RunFdOrFindCalls)-1]
-				if call.Dir != "/home" || call.Args != "-type d -name '.cache' -exec rm -rf {}/* \\;" ||
-					call.Message != "Clearing user caches..." || !call.Sudo {
-					t.Errorf("Unexpected arguments to RunFdOrFind: %+v", call)
+			if len(mock.Commands) > 0 {
+				expectedCmd := "fd/find /home -type d -name '.cache' -exec rm -rf {}/* \\;"
+				if mock.Commands[0] != expectedCmd {
+					t.Errorf("Unexpected command: got %s, want %s", mock.Commands[0], expectedCmd)
 				}
 			}
 		})
@@ -146,9 +100,6 @@ func TestCleanUserCaches(t *testing.T) {
 }
 
 func TestCleanUserTrash(t *testing.T) {
-	originalRunner := utils.Runner
-	defer func() { utils.Runner = originalRunner }()
-
 	tests := []struct {
 		name          string
 		fdOrFindErr   error
@@ -157,20 +108,22 @@ func TestCleanUserTrash(t *testing.T) {
 		expectedCalls int
 	}{
 		{"Success", nil, nil, false, 2},
-		{"FdOrFindError", errors.New("fd error"), nil, false, 3},
-		{"RunWithIndError", nil, errors.New("run error"), true, 3},
+		{"FdOrFindError", errors.New("fd error"), nil, false, 2},
+		{"RunWithIndError", nil, errors.New("run error"), true, 2},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockRunner{}
-			utils.Runner = mock
-
+			mock := setupTest()
 			if tt.fdOrFindErr != nil {
-				mock.RunFdOrFindCalls = append(mock.RunFdOrFindCalls, RunFdOrFindCall{Err: tt.fdOrFindErr})
+				mock.RunFdOrFindFunc = func(path, args, message string, sudo bool) error {
+					return tt.fdOrFindErr
+				}
 			}
 			if tt.withIndErr != nil {
-				mock.RunWithIndicatorCalls = append(mock.RunWithIndicatorCalls, RunWithIndicatorCall{Err: tt.withIndErr})
+				mock.RunWithIndicatorFunc = func(command, message string) error {
+					return tt.withIndErr
+				}
 			}
 
 			err := cleanUserTrash()
@@ -179,23 +132,21 @@ func TestCleanUserTrash(t *testing.T) {
 				t.Errorf("cleanUserTrash() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			totalCalls := len(mock.RunFdOrFindCalls) + len(mock.RunWithIndicatorCalls)
-			if totalCalls != tt.expectedCalls {
-				t.Errorf("Expected %d calls, got %d", tt.expectedCalls, totalCalls)
+			if len(mock.Commands) != tt.expectedCalls {
+				t.Errorf("Expected %d calls, got %d", tt.expectedCalls, len(mock.Commands))
 			}
 
-			if len(mock.RunFdOrFindCalls) > 0 {
-				call := mock.RunFdOrFindCalls[len(mock.RunFdOrFindCalls)-1]
-				if call.Dir != "/home" || call.Args != "-type d -name 'Trash' -exec rm -rf {}/* \\;" ||
-					call.Message != "Emptying user trash folders..." || !call.Sudo {
-					t.Errorf("Unexpected arguments to RunFdOrFind: %+v", call)
+			if len(mock.Commands) > 0 {
+				expectedFdCmd := "fd/find /home -type d -name 'Trash' -exec rm -rf {}/* \\;"
+				if mock.Commands[0] != expectedFdCmd {
+					t.Errorf("Unexpected fd command: got %s, want %s", mock.Commands[0], expectedFdCmd)
 				}
-			}
 
-			if len(mock.RunWithIndicatorCalls) > 0 {
-				call := mock.RunWithIndicatorCalls[len(mock.RunWithIndicatorCalls)-1]
-				if call.Command != "rm -rf /root/.local/share/Trash/*" || call.Message != "Emptying trash for root..." {
-					t.Errorf("Unexpected arguments to RunWithIndicator: %+v", call)
+				if len(mock.Commands) > 1 {
+					expectedRmCmd := "rm -rf /root/.local/share/Trash/*"
+					if mock.Commands[1] != expectedRmCmd {
+						t.Errorf("Unexpected rm command: got %s, want %s", mock.Commands[1], expectedRmCmd)
+					}
 				}
 			}
 		})
@@ -203,9 +154,6 @@ func TestCleanUserTrash(t *testing.T) {
 }
 
 func TestCleanUserHomeLogs(t *testing.T) {
-	originalRunner := utils.Runner
-	defer func() { utils.Runner = originalRunner }()
-
 	tests := []struct {
 		name          string
 		fdOrFindErr   error
@@ -213,16 +161,16 @@ func TestCleanUserHomeLogs(t *testing.T) {
 		expectedCalls int
 	}{
 		{"Success", nil, false, 1},
-		{"Error", errors.New("fd error"), false, 2},
+		{"Error", errors.New("fd error"), false, 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockRunner{}
-			utils.Runner = mock
-
+			mock := setupTest()
 			if tt.fdOrFindErr != nil {
-				mock.RunFdOrFindCalls = append(mock.RunFdOrFindCalls, RunFdOrFindCall{Err: tt.fdOrFindErr})
+				mock.RunFdOrFindFunc = func(path, args, message string, sudo bool) error {
+					return tt.fdOrFindErr
+				}
 			}
 
 			err := cleanUserHomeLogs()
@@ -231,15 +179,14 @@ func TestCleanUserHomeLogs(t *testing.T) {
 				t.Errorf("cleanUserHomeLogs() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			if len(mock.RunFdOrFindCalls) != tt.expectedCalls {
-				t.Errorf("Expected %d call(s) to RunFdOrFind, got %d", tt.expectedCalls, len(mock.RunFdOrFindCalls))
+			if len(mock.Commands) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s), got %d", tt.expectedCalls, len(mock.Commands))
 			}
 
-			if len(mock.RunFdOrFindCalls) > 0 {
-				call := mock.RunFdOrFindCalls[len(mock.RunFdOrFindCalls)-1]
-				if call.Dir != "/home" || call.Args != "-type f -name '*.log' -size +10M -delete" ||
-					call.Message != "Removing large log files in user home directories..." || !call.Sudo {
-					t.Errorf("Unexpected arguments to RunFdOrFind: %+v", call)
+			if len(mock.Commands) > 0 {
+				expectedCmd := "fd/find /home -type f -name '*.log' -size +10M -delete"
+				if mock.Commands[0] != expectedCmd {
+					t.Errorf("Unexpected command: got %s, want %s", mock.Commands[0], expectedCmd)
 				}
 			}
 		})

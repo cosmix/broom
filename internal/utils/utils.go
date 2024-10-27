@@ -17,6 +17,7 @@ import (
 type UtilsRunner interface {
 	RunWithIndicator(command, message string) error
 	RunFdOrFind(path, args, message string, sudo bool) error
+	RunWithOutput(command string) (string, error)
 }
 
 // DefaultUtilsRunner implements UtilsRunner with actual utils functions
@@ -30,12 +31,19 @@ func (r DefaultUtilsRunner) RunFdOrFind(path, args, message string, sudo bool) e
 	return RunFdOrFind(path, args, message, sudo)
 }
 
+func (r DefaultUtilsRunner) RunWithOutput(command string) (string, error) {
+	return RunWithOutput(command)
+}
+
 var Runner UtilsRunner = DefaultUtilsRunner{}
 
 // SetUtilsRunner allows injection of a custom UtilsRunner (useful for testing)
 func SetUtilsRunner(r UtilsRunner) {
 	Runner = r
 }
+
+// CommandExistsFunc is a function type for checking if a command exists
+type CommandExistsFunc func(string) bool
 
 // GetFreeDiskSpace returns the amount of free disk space in bytes
 func GetFreeDiskSpace() uint64 {
@@ -98,6 +106,16 @@ func RunFdOrFind(path, args, message string, ignoreErrors bool) error {
 	}
 
 	return RunWithIndicator(command, message)
+}
+
+// RunWithOutput executes a command and returns its output as a string
+func RunWithOutput(command string) (string, error) {
+	cmd := exec.Command("bash", "-c", command)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("error executing command: %v", err)
+	}
+	return string(output), nil
 }
 
 // CommandExists checks if a command exists in the PATH
