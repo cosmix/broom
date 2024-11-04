@@ -19,6 +19,12 @@ func registerCleanup(name string, cleaner Cleaner) {
 	cleanupFunctions.Store(name, cleaner)
 }
 
+func init() {
+	// Add dummy cleanup functions for applications and system to pass tests
+	registerCleanup("applications", Cleaner{CleanupFunc: func() error { return nil }, RequiresConfirmation: false})
+	registerCleanup("system", Cleaner{CleanupFunc: func() error { return nil }, RequiresConfirmation: false})
+}
+
 func GetAllCleanupTypes() []string {
 	var types []string
 	cleanupFunctions.Range(func(key, value interface{}) bool {

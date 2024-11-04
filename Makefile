@@ -1,4 +1,4 @@
-.PHONY: build install clean test
+.PHONY: build install clean test test-unit test-e2e
 
 BINARY_NAME=broom
 
@@ -11,8 +11,14 @@ install: build
 clean:
 	go clean
 	rm -f $(BINARY_NAME)
+	docker rmi broom-test -f 2>/dev/null || true
 
-test:
+test: test-unit test-e2e
+
+test-unit:
 	cd $(CURDIR) && go test -v ./...
+
+test-e2e:
+	./scripts/run-e2e-tests.sh
 
 .DEFAULT_GOAL := build
