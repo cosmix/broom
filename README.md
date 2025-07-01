@@ -24,6 +24,14 @@ Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems
 - Clear browser caches (Chrome, Chromium, Firefox)
 - Clean package manager caches (APT, YUM, DNF)
 - Clean npm cache
+- Clean yarn cache
+- Clean pnpm store
+- Clean Deno cache
+- Clean Bun cache
+- Clean pip cache
+- Clean poetry cache
+- Clean pipenv cache
+- Clean uv cache
 - Clean Gradle cache
 - Clean Composer cache
 - Remove old Wine prefixes
@@ -58,22 +66,25 @@ Broom asks you for confirmation whenever it's about to perform a potentially des
 
 ## Usage
 
-```
+```bash
 sudo broom [options]
 ```
 
 Options:
+
 - `-x`: Comma-separated list of cleanup types to exclude
 - `-i`: Comma-separated list of cleanup types to include
 - `--all`: Apply all removal types
 
 Example: Execute all cleaners except docker and snap
-```
+
+```bash
 sudo broom -x docker,snap
 ```
 
 Example: Execute only the cache and kernels cleaner
-```
+
+```bash
 sudo broom -i kernels,cache
 ```
 
@@ -83,7 +94,7 @@ Note that the `-x` and `-i` options are mutually exclusive. And `-all` is mutual
 
 To build the executable, use the provided Makefile:
 
-```
+```bash
 make
 ```
 
@@ -91,7 +102,7 @@ This will create the `broom` executable in the current directory.
 
 To install the executable to `/usr/local/bin/`:
 
-```
+```bash
 sudo make install
 ```
 

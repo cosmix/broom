@@ -1,3 +1,4 @@
+// Package cleaners provides application-specific cleanup functions for broom.
 package cleaners
 
 import (
@@ -18,6 +19,14 @@ func init() {
 	registerCleanup("browser", Cleaner{CleanupFunc: clearBrowserCaches, RequiresConfirmation: false})
 	registerCleanup("package_manager", Cleaner{CleanupFunc: cleanPackageManagerCaches(utils.CommandExists), RequiresConfirmation: false})
 	registerCleanup("npm", Cleaner{CleanupFunc: cleanNpmCache(utils.CommandExists), RequiresConfirmation: false})
+	registerCleanup("yarn", Cleaner{CleanupFunc: cleanYarnCache(utils.CommandExists), RequiresConfirmation: false})
+	registerCleanup("pnpm", Cleaner{CleanupFunc: cleanPnpmCache(utils.CommandExists), RequiresConfirmation: false})
+	registerCleanup("deno", Cleaner{CleanupFunc: cleanDenoCache, RequiresConfirmation: false})
+	registerCleanup("bun", Cleaner{CleanupFunc: cleanBunCache, RequiresConfirmation: false})
+	registerCleanup("pip", Cleaner{CleanupFunc: cleanPipCache(utils.CommandExists), RequiresConfirmation: false})
+	registerCleanup("poetry", Cleaner{CleanupFunc: cleanPoetryCache(utils.CommandExists), RequiresConfirmation: false})
+	registerCleanup("pipenv", Cleaner{CleanupFunc: cleanPipenvCache, RequiresConfirmation: false})
+	registerCleanup("uv", Cleaner{CleanupFunc: cleanUvCache(utils.CommandExists), RequiresConfirmation: false})
 	registerCleanup("gradle", Cleaner{CleanupFunc: cleanGradleCache, RequiresConfirmation: false})
 	registerCleanup("composer", Cleaner{CleanupFunc: cleanComposerCache(utils.CommandExists), RequiresConfirmation: false})
 	registerCleanup("wine", Cleaner{CleanupFunc: removeOldWinePrefixes(utils.CommandExists), RequiresConfirmation: false})
@@ -160,6 +169,71 @@ func cleanNpmCache(commandExists utils.CommandExistsFunc) func() error {
 			return utils.Runner.RunWithIndicator("npm cache clean --force", "Cleaning npm cache")
 		}
 		fmt.Println("npm cache cleanup: Skipped (not installed)")
+		return nil
+	}
+}
+
+func cleanYarnCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if commandExists("yarn") {
+			return utils.Runner.RunWithIndicator("yarn cache clean", "Cleaning yarn cache")
+		}
+		fmt.Println("yarn cache cleanup: Skipped (not installed)")
+		return nil
+	}
+}
+
+func cleanPnpmCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if commandExists("pnpm") {
+			return utils.Runner.RunWithIndicator("pnpm store prune", "Cleaning pnpm store")
+		}
+		fmt.Println("pnpm cache cleanup: Skipped (not installed)")
+		return nil
+	}
+}
+
+func cleanDenoCache() error {
+	cacheDir := "$HOME/.cache/deno"
+	return utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", cacheDir), "Cleaning Deno cache")
+}
+
+func cleanBunCache() error {
+	cacheDir := "$HOME/.bun/install/cache"
+	return utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", cacheDir), "Cleaning Bun cache")
+}
+
+func cleanPipCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if commandExists("pip") {
+			return utils.Runner.RunWithIndicator("pip cache purge", "Cleaning pip cache")
+		}
+		fmt.Println("pip cache cleanup: Skipped (not installed)")
+		return nil
+	}
+}
+
+func cleanPoetryCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if commandExists("poetry") {
+			return utils.Runner.RunWithIndicator("poetry cache clear . --all", "Cleaning poetry cache")
+		}
+		fmt.Println("poetry cache cleanup: Skipped (not installed)")
+		return nil
+	}
+}
+
+func cleanPipenvCache() error {
+	cacheDir := "$HOME/.cache/pipenv"
+	return utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", cacheDir), "Cleaning pipenv cache")
+}
+
+func cleanUvCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if commandExists("uv") {
+			return utils.Runner.RunWithIndicator("uv cache clean", "Cleaning uv cache")
+		}
+		fmt.Println("uv cache cleanup: Skipped (not installed)")
 		return nil
 	}
 }

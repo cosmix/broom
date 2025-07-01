@@ -482,6 +482,341 @@ func TestCleanNpmCache(t *testing.T) {
 	}
 }
 
+func TestCleanYarnCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		commandExists utils.CommandExistsFunc
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"YarnInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"YarnNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "yarn cache clean",
+					Message: "Cleaning yarn cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			cleanFunc := cleanYarnCache(tt.commandExists)
+			err := cleanFunc()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanYarnCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanPnpmCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		commandExists utils.CommandExistsFunc
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"PnpmInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"PnpmNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "pnpm store prune",
+					Message: "Cleaning pnpm store",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			cleanFunc := cleanPnpmCache(tt.commandExists)
+			err := cleanFunc()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanPnpmCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanDenoCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"Success", nil, false, 1},
+		{"RunWithIndicatorError", errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.cache/deno/*",
+					Message: "Cleaning Deno cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			err := cleanDenoCache()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanDenoCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanBunCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"Success", nil, false, 1},
+		{"RunWithIndicatorError", errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.bun/install/cache/*",
+					Message: "Cleaning Bun cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			err := cleanBunCache()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanBunCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanPipCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		commandExists utils.CommandExistsFunc
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"PipInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"PipNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "pip cache purge",
+					Message: "Cleaning pip cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			cleanFunc := cleanPipCache(tt.commandExists)
+			err := cleanFunc()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanPipCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanPoetryCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		commandExists utils.CommandExistsFunc
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"PoetryInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"PoetryNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "poetry cache clear . --all",
+					Message: "Cleaning poetry cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			cleanFunc := cleanPoetryCache(tt.commandExists)
+			err := cleanFunc()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanPoetryCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanPipenvCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"Success", nil, false, 1},
+		{"RunWithIndicatorError", errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.cache/pipenv/*",
+					Message: "Cleaning pipenv cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			err := cleanPipenvCache()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanPipenvCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanUvCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		commandExists utils.CommandExistsFunc
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"UvInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"UvNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "uv cache clean",
+					Message: "Cleaning uv cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			cleanFunc := cleanUvCache(tt.commandExists)
+			err := cleanFunc()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanUvCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
 func TestCleanGradleCache(t *testing.T) {
 	originalRunner := utils.Runner
 	defer func() { utils.Runner = originalRunner }()
