@@ -2080,3 +2080,333 @@ func TestCleanCCache(t *testing.T) {
 		})
 	}
 }
+
+// Phase 2: Modern DevOps Tools Tests
+
+func TestCleanKubectlCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name        string
+		withIndErr  error
+		expectErr   bool
+		expectedMsg string
+	}{
+		{"Success", nil, false, ""},
+		{"FirstCommandError", errors.New("rm error"), false, "Warning: Error while cleaning kubectl cache: rm error\n"},
+		{"SecondCommandError", errors.New("rm error"), false, "Warning: Error while cleaning kubectl HTTP cache: rm error\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.kube/cache/*",
+					Message: "Cleaning kubectl cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			err := cleanKubectlCache()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanKubectlCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			expectedCalls := 2
+			if len(mock.RunWithIndicatorCalls) != expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanHelmCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name        string
+		withIndErr  error
+		expectErr   bool
+		expectedMsg string
+	}{
+		{"Success", nil, false, ""},
+		{"FirstCommandError", errors.New("rm error"), false, "Warning: Error while cleaning Helm cache: rm error\n"},
+		{"SecondCommandError", errors.New("rm error"), false, "Warning: Error while cleaning Helm data: rm error\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.cache/helm/*",
+					Message: "Cleaning Helm cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			err := cleanHelmCache()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanHelmCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			expectedCalls := 2
+			if len(mock.RunWithIndicatorCalls) != expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+		})
+	}
+}
+
+func TestCleanMinikubeCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		commandExists utils.CommandExistsFunc
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"MinikubeInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"MinikubeNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.minikube/cache/*",
+					Message: "Cleaning minikube cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			cleanFunc := cleanMinikubeCache(tt.commandExists)
+			err := cleanFunc()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanMinikubeCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+
+			if len(mock.RunWithIndicatorCalls) > 0 {
+				call := mock.RunWithIndicatorCalls[0]
+				if call.Command != "rm -rf $HOME/.minikube/cache/*" || call.Message != "Cleaning minikube cache" {
+					t.Errorf("Unexpected arguments to RunWithIndicator: %+v", call)
+				}
+			}
+		})
+	}
+}
+
+func TestCleanTerraformCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name       string
+		withIndErr error
+		expectErr  bool
+	}{
+		{"Success", nil, false},
+		{"RunWithIndicatorError", errors.New("run error"), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.terraform.d/plugin-cache/*",
+					Message: "Cleaning Terraform plugin cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			err := cleanTerraformCache()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanTerraformCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			expectedCalls := 1
+			if len(mock.RunWithIndicatorCalls) != expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+
+			if len(mock.RunWithIndicatorCalls) > 0 {
+				call := mock.RunWithIndicatorCalls[0]
+				if call.Command != "rm -rf $HOME/.terraform.d/plugin-cache/*" || call.Message != "Cleaning Terraform plugin cache" {
+					t.Errorf("Unexpected arguments to RunWithIndicator: %+v", call)
+				}
+			}
+		})
+	}
+}
+
+func TestCleanAnsibleTemp(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name       string
+		withIndErr error
+		expectErr  bool
+	}{
+		{"Success", nil, false},
+		{"RunWithIndicatorError", errors.New("run error"), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf $HOME/.ansible/tmp/*",
+					Message: "Cleaning Ansible temporary files",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			err := cleanAnsibleTemp()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanAnsibleTemp() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			expectedCalls := 1
+			if len(mock.RunWithIndicatorCalls) != expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+
+			if len(mock.RunWithIndicatorCalls) > 0 {
+				call := mock.RunWithIndicatorCalls[0]
+				if call.Command != "rm -rf $HOME/.ansible/tmp/*" || call.Message != "Cleaning Ansible temporary files" {
+					t.Errorf("Unexpected arguments to RunWithIndicator: %+v", call)
+				}
+			}
+		})
+	}
+}
+
+func TestCleanContainerdCache(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		commandExists utils.CommandExistsFunc
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"ContainerdInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"ContainerdNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/*",
+					Message: "Cleaning containerd cache",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			cleanFunc := cleanContainerdCache(tt.commandExists)
+			err := cleanFunc()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanContainerdCache() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+
+			if len(mock.RunWithIndicatorCalls) > 0 {
+				call := mock.RunWithIndicatorCalls[0]
+				if call.Command != "rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/*" || call.Message != "Cleaning containerd cache" {
+					t.Errorf("Unexpected arguments to RunWithIndicator: %+v", call)
+				}
+			}
+		})
+	}
+}
+
+func TestCleanPodmanSystem(t *testing.T) {
+	originalRunner := utils.Runner
+	defer func() { utils.Runner = originalRunner }()
+
+	tests := []struct {
+		name          string
+		commandExists utils.CommandExistsFunc
+		withIndErr    error
+		expectErr     bool
+		expectedCalls int
+	}{
+		{"PodmanInstalled", func(cmd string) bool { return true }, nil, false, 1},
+		{"PodmanNotInstalled", func(cmd string) bool { return false }, nil, false, 0},
+		{"RunWithIndicatorError", func(cmd string) bool { return true }, errors.New("run error"), true, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockRunner{}
+			utils.Runner = mock
+
+			if tt.withIndErr != nil {
+				mock.RunWithIndicatorCalls = []RunWithIndicatorCall{{
+					Command: "podman system prune -af",
+					Message: "Cleaning podman system",
+					Err:     tt.withIndErr,
+				}}
+			}
+
+			cleanFunc := cleanPodmanSystem(tt.commandExists)
+			err := cleanFunc()
+
+			if (err != nil) != tt.expectErr {
+				t.Errorf("cleanPodmanSystem() error = %v, expectErr %v", err, tt.expectErr)
+			}
+
+			if len(mock.RunWithIndicatorCalls) != tt.expectedCalls {
+				t.Errorf("Expected %d call(s) to RunWithIndicator, got %d", tt.expectedCalls, len(mock.RunWithIndicatorCalls))
+			}
+
+			if len(mock.RunWithIndicatorCalls) > 0 {
+				call := mock.RunWithIndicatorCalls[0]
+				if call.Command != "podman system prune -af" || call.Message != "Cleaning podman system" {
+					t.Errorf("Unexpected arguments to RunWithIndicator: %+v", call)
+				}
+			}
+		})
+	}
+}

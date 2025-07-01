@@ -50,6 +50,14 @@ func init() {
 	registerCleanup("cmake", Cleaner{CleanupFunc: cleanCMakeBuildDirs, RequiresConfirmation: true})
 	registerCleanup("autotools", Cleaner{CleanupFunc: cleanAutotoolsFiles, RequiresConfirmation: true})
 	registerCleanup("ccache", Cleaner{CleanupFunc: cleanCCache(utils.CommandExists), RequiresConfirmation: true})
+	// Phase 2: Modern DevOps Tools
+	registerCleanup("kubectl", Cleaner{CleanupFunc: cleanKubectlCache, RequiresConfirmation: false})
+	registerCleanup("helm", Cleaner{CleanupFunc: cleanHelmCache, RequiresConfirmation: false})
+	registerCleanup("minikube", Cleaner{CleanupFunc: cleanMinikubeCache(utils.CommandExists), RequiresConfirmation: false})
+	registerCleanup("terraform", Cleaner{CleanupFunc: cleanTerraformCache, RequiresConfirmation: false})
+	registerCleanup("ansible", Cleaner{CleanupFunc: cleanAnsibleTemp, RequiresConfirmation: false})
+	registerCleanup("containerd", Cleaner{CleanupFunc: cleanContainerdCache(utils.CommandExists), RequiresConfirmation: true})
+	registerCleanup("podman_system", Cleaner{CleanupFunc: cleanPodmanSystem(utils.CommandExists), RequiresConfirmation: true})
 }
 
 func cleanDocker(commandExists utils.CommandExistsFunc) func() error {
@@ -559,6 +567,82 @@ func cleanCCache(commandExists utils.CommandExistsFunc) func() error {
 			return fmt.Errorf("failed to clear ccache: %v", err)
 		}
 
+		return nil
+	}
+}
+
+// Phase 2: Modern DevOps Tools
+
+func cleanKubectlCache() error {
+	kubeCacheDir := "$HOME/.kube/cache"
+	err := utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", kubeCacheDir), "Cleaning kubectl cache")
+	if err != nil {
+		fmt.Printf("Warning: Error while cleaning kubectl cache: %v\n", err)
+	}
+
+	kubeHTTPCacheDir := "$HOME/.kube/http-cache"
+	err = utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", kubeHTTPCacheDir), "Cleaning kubectl HTTP cache")
+	if err != nil {
+		fmt.Printf("Warning: Error while cleaning kubectl HTTP cache: %v\n", err)
+	}
+
+	return nil
+}
+
+func cleanHelmCache() error {
+	helmCacheDir := "$HOME/.cache/helm"
+	err := utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", helmCacheDir), "Cleaning Helm cache")
+	if err != nil {
+		fmt.Printf("Warning: Error while cleaning Helm cache: %v\n", err)
+	}
+
+	helmDataDir := "$HOME/.local/share/helm"
+	err = utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", helmDataDir), "Cleaning Helm data")
+	if err != nil {
+		fmt.Printf("Warning: Error while cleaning Helm data: %v\n", err)
+	}
+
+	return nil
+}
+
+func cleanMinikubeCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if commandExists("minikube") {
+			minikubeCacheDir := "$HOME/.minikube/cache"
+			return utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", minikubeCacheDir), "Cleaning minikube cache")
+		}
+		fmt.Println("minikube cache cleanup: Skipped (not installed)")
+		return nil
+	}
+}
+
+func cleanTerraformCache() error {
+	terraformCacheDir := "$HOME/.terraform.d/plugin-cache"
+	return utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", terraformCacheDir), "Cleaning Terraform plugin cache")
+}
+
+func cleanAnsibleTemp() error {
+	ansibleTempDir := "$HOME/.ansible/tmp"
+	return utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", ansibleTempDir), "Cleaning Ansible temporary files")
+}
+
+func cleanContainerdCache(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if commandExists("containerd") {
+			containerdPath := "/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs"
+			return utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s/*", containerdPath), "Cleaning containerd cache")
+		}
+		fmt.Println("containerd cleanup: Skipped (not installed)")
+		return nil
+	}
+}
+
+func cleanPodmanSystem(commandExists utils.CommandExistsFunc) func() error {
+	return func() error {
+		if commandExists("podman") {
+			return utils.Runner.RunWithIndicator("podman system prune -af", "Cleaning podman system")
+		}
+		fmt.Println("podman system cleanup: Skipped (not installed)")
 		return nil
 	}
 }

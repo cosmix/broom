@@ -60,6 +60,13 @@ Broom is a Go-based system cleanup utility for GNU/Linux-based operating systems
 - Clean CMake build directories
 - Clean Autotools generated files
 - Clean ccache
+- Clean kubectl cache and HTTP cache
+- Clean Helm cache and data
+- Clean minikube cache
+- Clean Terraform plugin cache
+- Clean Ansible temporary files
+- Clean containerd cache
+- Clean podman system (prune containers, images, volumes)
 - Use `fd` for faster file searching when available, with fallback to `find`
 
 Broom asks you for confirmation whenever it's about to perform a potentially destructive operation. You can choose to include or exclude specific 'cleaners' based on your requirements. At the end of a brooming session you will be presented with a summary of the cleanup operations performed, and their characteristics.
