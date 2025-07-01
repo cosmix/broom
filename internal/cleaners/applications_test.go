@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -68,6 +69,11 @@ func (m *MockRunner) RunWithOutput(command string) (string, error) {
 		return m.RunWithOutputCalls[0].Output, m.RunWithOutputCalls[0].Err
 	}
 	return "", nil
+}
+
+func (m *MockRunner) RunRgOrGrep(pattern, path, args, message string) error {
+	// Simple mock implementation for RunRgOrGrep
+	return nil
 }
 
 func TestCleanDocker(t *testing.T) {
@@ -309,8 +315,9 @@ func TestCleanPythonCache(t *testing.T) {
 				t.Errorf("cleanPythonCache() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			if len(mock.RunFdOrFindCalls) != 2 {
-				t.Errorf("Expected 2 calls to RunFdOrFind, got %d", len(mock.RunFdOrFindCalls))
+			// Optimized to use single combined command instead of 2 separate ones
+			if len(mock.RunFdOrFindCalls) != 1 {
+				t.Errorf("Expected 1 call to RunFdOrFind, got %d", len(mock.RunFdOrFindCalls))
 			}
 		})
 	}
@@ -371,8 +378,9 @@ func TestClearBrowserCaches(t *testing.T) {
 				t.Errorf("clearBrowserCaches() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			if len(mock.RunFdOrFindCalls) != 3 {
-				t.Errorf("Expected 3 calls to RunFdOrFind, got %d", len(mock.RunFdOrFindCalls))
+			// Optimized to use single combined command instead of 3 separate ones
+			if len(mock.RunFdOrFindCalls) != 1 {
+				t.Errorf("Expected 1 call to RunFdOrFind, got %d", len(mock.RunFdOrFindCalls))
 			}
 		})
 	}
@@ -1962,17 +1970,6 @@ func TestCleanAutotoolsFiles(t *testing.T) {
 	originalRunner := utils.Runner
 	defer func() { utils.Runner = originalRunner }()
 
-	patterns := []string{
-		"autom4te.cache",
-		"config.status",
-		"config.log",
-		"configure~",
-		"Makefile.in",
-		"aclocal.m4",
-		".deps",
-		".libs",
-	}
-
 	tests := []struct {
 		name        string
 		fdOrFindErr error
@@ -1998,19 +1995,23 @@ func TestCleanAutotoolsFiles(t *testing.T) {
 				t.Errorf("cleanAutotoolsFiles() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			if len(mock.RunFdOrFindCalls) != len(patterns) {
-				t.Errorf("Expected %d calls to RunFdOrFind, got %d", len(patterns), len(mock.RunFdOrFindCalls))
+			// Now we expect only 1 call instead of 9 separate calls
+			if len(mock.RunFdOrFindCalls) != 1 {
+				t.Errorf("Expected 1 call to RunFdOrFind, got %d", len(mock.RunFdOrFindCalls))
 			}
 
-			for i, pattern := range patterns {
-				if i < len(mock.RunFdOrFindCalls) {
-					call := mock.RunFdOrFindCalls[i]
-					expectedArgs := fmt.Sprintf("-type d,f -name '%s' -exec rm -rf {} \\;", pattern)
-					expectedMessage := fmt.Sprintf("Removing Autotools generated %s", pattern)
-					if call.Dir != "/home" || call.Args != expectedArgs ||
-						call.Message != expectedMessage || !call.Sudo {
-						t.Errorf("Unexpected arguments for pattern %s: %+v", pattern, call)
-					}
+			if len(mock.RunFdOrFindCalls) > 0 {
+				call := mock.RunFdOrFindCalls[0]
+				// Check that it combines all patterns in a single command
+				expectedArgs := "\\( -name 'autom4te.cache' -o -name 'config.status' -o -name 'config.log' -o -name 'configure~' -o -name 'Makefile.in' -o -name 'aclocal.m4' -o -name '.deps' -o -name '.libs' \\) -exec rm -rf {} \\;"
+				expectedMessage := "Removing Autotools generated files"
+				
+				// Directory should be user's home or /home as fallback
+				if (call.Dir != os.Getenv("HOME") && call.Dir != "/home") || 
+					call.Args != expectedArgs ||
+					call.Message != expectedMessage || !call.Sudo {
+					t.Errorf("Unexpected arguments: Dir=%s, Args=%s, Message=%s, Sudo=%v", 
+						call.Dir, call.Args, call.Message, call.Sudo)
 				}
 			}
 		})

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cosmix/broom/internal/cleaners"
+	"github.com/cosmix/broom/internal/tui"
 	"github.com/cosmix/broom/internal/utils"
 	"github.com/logrusorgru/aurora"
 	"github.com/manifoldco/promptui"
@@ -49,9 +50,10 @@ func main() {
 	excludeTypes := flag.String("x", "", "Comma-separated list of cleanup types to exclude")
 	includeTypes := flag.String("i", "", "Comma-separated list of cleanup types to include")
 	allFlag := flag.Bool("all", false, "Apply all removal types")
+	interactiveFlag := flag.Bool("interactive", false, "Launch interactive TUI mode")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-x exclude_types] [-i include_types] [--all]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-x exclude_types] [-i include_types] [--all] [--interactive]\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nAvailable cleanup types:\n")
@@ -61,6 +63,16 @@ func main() {
 	}
 
 	flag.Parse()
+
+	// Launch interactive TUI mode if requested
+	if *interactiveFlag {
+		err := tui.RunTUI(ctx)
+		if err != nil {
+			fmt.Println(au.Red(fmt.Sprintf("Error running TUI: %s", err)))
+			os.Exit(1)
+		}
+		return
+	}
 
 	typesToRun, err := parseFlags(*excludeTypes, *includeTypes, *allFlag)
 	if err != nil {

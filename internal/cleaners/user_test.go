@@ -2,6 +2,7 @@ package cleaners
 
 import (
 	"errors"
+	"os"
 	"testing"
 )
 
@@ -43,13 +44,18 @@ func TestCleanHomeDirectory(t *testing.T) {
 			}
 
 			if len(mock.Commands) > 0 {
-				expectedFdCmd := "fd/find /home -type f \\( -name '*.tmp' -o -name '*.temp' -o -name '*.swp' -o -name '*~' \\) -delete"
+				// Optimized to use current user's home directory
+				homeDir := os.Getenv("HOME")
+				if homeDir == "" {
+					homeDir = "/home"
+				}
+				expectedFdCmd := "fd/find " + homeDir + " -type f \\( -name '*.tmp' -o -name '*.temp' -o -name '*.swp' -o -name '*~' \\) -delete"
 				if mock.Commands[0] != expectedFdCmd {
 					t.Errorf("Unexpected fd command: got %s, want %s", mock.Commands[0], expectedFdCmd)
 				}
 
 				if len(mock.Commands) > 1 {
-					expectedRmCmd := "rm -rf /home/*/.cache/thumbnails/*"
+					expectedRmCmd := "rm -rf " + homeDir + "/.cache/thumbnails/*"
 					if mock.Commands[1] != expectedRmCmd {
 						t.Errorf("Unexpected rm command: got %s, want %s", mock.Commands[1], expectedRmCmd)
 					}
@@ -90,7 +96,12 @@ func TestCleanUserCaches(t *testing.T) {
 			}
 
 			if len(mock.Commands) > 0 {
-				expectedCmd := "fd/find /home -type d -name '.cache' -exec rm -rf {}/* \\;"
+				// Optimized to use current user's home directory
+				homeDir := os.Getenv("HOME")
+				if homeDir == "" {
+					homeDir = "/home"
+				}
+				expectedCmd := "fd/find " + homeDir + " -type d -name '.cache' -exec rm -rf {}/* \\;"
 				if mock.Commands[0] != expectedCmd {
 					t.Errorf("Unexpected command: got %s, want %s", mock.Commands[0], expectedCmd)
 				}
@@ -137,13 +148,18 @@ func TestCleanUserTrash(t *testing.T) {
 			}
 
 			if len(mock.Commands) > 0 {
-				expectedFdCmd := "fd/find /home -type d -name 'Trash' -exec rm -rf {}/* \\;"
+				// Optimized to use current user's home directory
+				homeDir := os.Getenv("HOME")
+				if homeDir == "" {
+					homeDir = "/home"
+				}
+				expectedFdCmd := "fd/find " + homeDir + " -type d -name 'Trash' -exec rm -rf {}/* \\;"
 				if mock.Commands[0] != expectedFdCmd {
 					t.Errorf("Unexpected fd command: got %s, want %s", mock.Commands[0], expectedFdCmd)
 				}
 
 				if len(mock.Commands) > 1 {
-					expectedRmCmd := "rm -rf /root/.local/share/Trash/*"
+					expectedRmCmd := "rm -rf " + homeDir + "/.local/share/Trash/*"
 					if mock.Commands[1] != expectedRmCmd {
 						t.Errorf("Unexpected rm command: got %s, want %s", mock.Commands[1], expectedRmCmd)
 					}
@@ -184,7 +200,12 @@ func TestCleanUserHomeLogs(t *testing.T) {
 			}
 
 			if len(mock.Commands) > 0 {
-				expectedCmd := "fd/find /home -type f -name '*.log' -size +10M -delete"
+				// Optimized to use current user's home directory
+				homeDir := os.Getenv("HOME")
+				if homeDir == "" {
+					homeDir = "/home"
+				}
+				expectedCmd := "fd/find " + homeDir + " -type f -name '*.log' -size +10M -delete"
 				if mock.Commands[0] != expectedCmd {
 					t.Errorf("Unexpected command: got %s, want %s", mock.Commands[0], expectedCmd)
 				}

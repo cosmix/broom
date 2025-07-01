@@ -17,6 +17,7 @@ import (
 type UtilsRunner interface {
 	RunWithIndicator(command, message string) error
 	RunFdOrFind(path, args, message string, sudo bool) error
+	RunRgOrGrep(pattern, path, args, message string) error
 	RunWithOutput(command string) (string, error)
 }
 
@@ -29,6 +30,10 @@ func (r DefaultUtilsRunner) RunWithIndicator(command, message string) error {
 
 func (r DefaultUtilsRunner) RunFdOrFind(path, args, message string, sudo bool) error {
 	return RunFdOrFind(path, args, message, sudo)
+}
+
+func (r DefaultUtilsRunner) RunRgOrGrep(pattern, path, args, message string) error {
+	return RunRgOrGrep(pattern, path, args, message)
 }
 
 func (r DefaultUtilsRunner) RunWithOutput(command string) (string, error) {
@@ -105,6 +110,20 @@ func RunFdOrFind(path, args, message string, ignoreErrors bool) error {
 		command += " 2>/dev/null || true"
 	}
 
+	return RunWithIndicator(command, message)
+}
+
+// RunRgOrGrep executes a search using ripgrep if available, falling back to grep
+func RunRgOrGrep(pattern, path, args, message string) error {
+	var command string
+	if CommandExists("rg") {
+		// Use ripgrep with common options
+		command = fmt.Sprintf("rg %s '%s' %s", args, pattern, path)
+	} else {
+		// Fall back to grep
+		command = fmt.Sprintf("grep %s '%s' %s", args, pattern, path)
+	}
+	
 	return RunWithIndicator(command, message)
 }
 

@@ -3,6 +3,7 @@ package cleaners
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/cosmix/broom/internal/utils"
@@ -115,19 +116,25 @@ func cleanRubyGems(commandExists utils.CommandExistsFunc) func() error {
 }
 
 func cleanPythonCache() error {
-	err := utils.Runner.RunFdOrFind("/home /tmp", "-type d -name __pycache__ -exec rm -rf {} +", "Removing Python cache files", true)
+	// Combine both Python cleanup operations into a single filesystem traversal
+	// This is much faster than two separate searches
+	combinedArgs := "\\( -type d -name __pycache__ -exec rm -rf {} + \\) -o \\( -name '*.pyc' -delete \\)"
+	
+	err := utils.Runner.RunFdOrFind("/home /tmp", combinedArgs, "Removing Python cache files and .pyc files", true)
 	if err != nil {
-		fmt.Printf("Warning: Error while removing Python cache files: %v\n", err)
-	}
-	err = utils.Runner.RunFdOrFind("/home /tmp", "-name '*.pyc' -delete", "Removing .pyc files", true)
-	if err != nil {
-		fmt.Printf("Warning: Error while removing .pyc files: %v\n", err)
+		fmt.Printf("Warning: Error while cleaning Python files: %v\n", err)
 	}
 	return nil
 }
 
 func cleanLibreOfficeCache() error {
-	err := utils.Runner.RunFdOrFind("/home", "-type d -path '*/.config/libreoffice/4/user/uno_packages/cache' -exec rm -rf {}/* \\;", "Clearing LibreOffice cache", true)
+	// Target current user's home directory for better performance
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/home"
+	}
+	
+	err := utils.Runner.RunFdOrFind(homeDir, "-type d -path '*/.config/libreoffice/4/user/uno_packages/cache' -exec rm -rf {}/* \\;", "Clearing LibreOffice cache", true)
 	if err != nil {
 		fmt.Printf("Warning: Error while clearing LibreOffice cache: %v\n", err)
 	}
@@ -135,17 +142,21 @@ func cleanLibreOfficeCache() error {
 }
 
 func clearBrowserCaches() error {
-	err := utils.Runner.RunFdOrFind("/home", "-type d -path '*/.cache/google-chrome/Default/Cache' -exec rm -rf {}/* \\;", "Clearing Chrome cache", true)
-	if err != nil {
-		fmt.Printf("Warning: Error while clearing Chrome cache: %v\n", err)
+	// Target current user's home directory for better performance
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/home"
 	}
-	err = utils.Runner.RunFdOrFind("/home", "-type d -path '*/.cache/chromium/Default/Cache' -exec rm -rf {}/* \\;", "Clearing Chromium cache", true)
+	
+	// Combine all browser cache cleanups into a single filesystem traversal
+	// This reduces 3 separate searches to 1, significantly improving performance
+	combinedArgs := "\\( -type d -path '*/.cache/google-chrome/Default/Cache' -exec rm -rf {}/* \\; \\) -o " +
+		"\\( -type d -path '*/.cache/chromium/Default/Cache' -exec rm -rf {}/* \\; \\) -o " +
+		"\\( -type d -path '*/.mozilla/firefox/*/Cache' -exec rm -rf {}/* \\; \\)"
+	
+	err := utils.Runner.RunFdOrFind(homeDir, combinedArgs, "Clearing browser caches (Chrome, Chromium, Firefox)", true)
 	if err != nil {
-		fmt.Printf("Warning: Error while clearing Chromium cache: %v\n", err)
-	}
-	err = utils.Runner.RunFdOrFind("/home", "-type d -path '*/.mozilla/firefox/*/Cache' -exec rm -rf {}/* \\;", "Clearing Firefox cache", true)
-	if err != nil {
-		fmt.Printf("Warning: Error while clearing Firefox cache: %v\n", err)
+		fmt.Printf("Warning: Error while clearing browser caches: %v\n", err)
 	}
 	return nil
 }
@@ -275,7 +286,13 @@ func removeOldWinePrefixes(commandExists utils.CommandExistsFunc) func() error {
 }
 
 func cleanElectronCache() error {
-	err := utils.Runner.RunFdOrFind("/home", "-type d -path '*/.config/*electron*' -exec rm -rf {}/* \\;", "Clearing Electron cache", true)
+	// Target current user's home directory for better performance
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/home"
+	}
+	
+	err := utils.Runner.RunFdOrFind(homeDir, "-type d -path '*/.config/*electron*' -exec rm -rf {}/* \\;", "Clearing Electron cache", true)
 	if err != nil {
 		fmt.Printf("Warning: Error while clearing Electron cache: %v\n", err)
 	}
@@ -411,7 +428,8 @@ func cleanAndroidSDK(commandExists utils.CommandExistsFunc) func() error {
 func cleanJetBrainsIDECaches() func() error {
 	return func() error {
 		jetbrainsDir := "~/.local/share/JetBrains"
-		err := utils.Runner.RunWithIndicator(fmt.Sprintf("find %s -type d -name '.caches' -exec rm -rf {} +", jetbrainsDir), "Cleaning JetBrains IDE caches")
+		// Use fd if available for faster search, fall back to find
+		err := utils.Runner.RunFdOrFind(jetbrainsDir, "-type d -name '.caches' -exec rm -rf {} +", "Cleaning JetBrains IDE caches", false)
 		if err != nil {
 			return fmt.Errorf("failed to clean JetBrains IDE caches: %v", err)
 		}
@@ -488,7 +506,13 @@ func cleanMercurialBackups(commandExists utils.CommandExistsFunc) func() error {
 			return nil
 		}
 
-		err := utils.Runner.RunFdOrFind("/home", "-type f -name '*.hg*.bak' -delete", "Removing Mercurial backup files", true)
+		// Target current user's home directory for better performance
+		homeDir := os.Getenv("HOME")
+		if homeDir == "" {
+			homeDir = "/home"
+		}
+
+		err := utils.Runner.RunFdOrFind(homeDir, "-type f -name '*.hg*.bak' -delete", "Removing Mercurial backup files", true)
 		if err != nil {
 			fmt.Printf("Warning: Error while removing Mercurial backup files: %v\n", err)
 		}
@@ -520,14 +544,20 @@ func cleanGitLFSCache(commandExists utils.CommandExistsFunc) func() error {
 }
 
 func cleanCMakeBuildDirs() error {
-	err := utils.Runner.RunFdOrFind("/home", "-type d -name 'build' -exec test -f '{}/CMakeCache.txt' \\; -exec rm -rf {} \\;", "Removing old CMake build directories", true)
-	if err != nil {
-		fmt.Printf("Warning: Error while removing CMake build directories: %v\n", err)
+	// Target current user's home directory for better performance
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/home"
 	}
-
-	err = utils.Runner.RunFdOrFind("/home", "-type d -name 'CMakeFiles' -exec rm -rf {} \\;", "Removing CMakeFiles directories", true)
+	
+	// Combine both CMake cleanup operations into a single filesystem traversal
+	// This reduces 2 separate searches to 1, improving performance
+	combinedArgs := "\\( -type d -name 'build' -exec test -f '{}/CMakeCache.txt' \\; -exec rm -rf {} \\; \\) -o " +
+		"\\( -type d -name 'CMakeFiles' -exec rm -rf {} \\; \\)"
+	
+	err := utils.Runner.RunFdOrFind(homeDir, combinedArgs, "Removing CMake build directories and CMakeFiles", true)
 	if err != nil {
-		fmt.Printf("Warning: Error while removing CMakeFiles directories: %v\n", err)
+		fmt.Printf("Warning: Error while cleaning CMake files: %v\n", err)
 	}
 
 	return nil
@@ -545,11 +575,30 @@ func cleanAutotoolsFiles() error {
 		".libs",
 	}
 
-	for _, pattern := range patterns {
-		err := utils.Runner.RunFdOrFind("/home", fmt.Sprintf("-type d,f -name '%s' -exec rm -rf {} \\;", pattern), fmt.Sprintf("Removing Autotools generated %s", pattern), true)
-		if err != nil {
-			fmt.Printf("Warning: Error while removing Autotools %s: %v\n", pattern, err)
+	// Combine all patterns into a single efficient search command
+	// This reduces 9 separate filesystem traversals to just 1
+	var nameArgs []string
+	for i, pattern := range patterns {
+		if i == 0 {
+			nameArgs = append(nameArgs, fmt.Sprintf("-name '%s'", pattern))
+		} else {
+			nameArgs = append(nameArgs, fmt.Sprintf("-o -name '%s'", pattern))
 		}
+	}
+	
+	// Construct single combined find/fd command
+	combinedArgs := fmt.Sprintf("\\( %s \\) -exec rm -rf {} \\;", strings.Join(nameArgs, " "))
+	
+	// Use current user's home directory instead of entire /home to be more targeted
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/home"
+	}
+	
+	// Single command with error suppression to avoid noise
+	err := utils.Runner.RunFdOrFind(homeDir, combinedArgs, "Removing Autotools generated files", true)
+	if err != nil {
+		fmt.Printf("Warning: Error while cleaning Autotools files: %v\n", err)
 	}
 
 	return nil
