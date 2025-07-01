@@ -167,10 +167,7 @@ func printCleanupSummary(results []cleanupResult, totalSpaceFreed, startSpace ui
 	fmt.Println(au.Bold("\nCleanup Summary:"))
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Cleanup Type", "Status", "Space Freed", "Time Taken"})
-	table.SetBorder(false)
-	table.SetAutoWrapText(false)
-	table.SetColumnAlignment([]int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_CENTER, tablewriter.ALIGN_RIGHT, tablewriter.ALIGN_RIGHT})
+	table.Header("Cleanup Type", "Status", "Space Freed", "Time Taken")
 
 	maxSpaceFreed := uint64(0)
 	maxDuration := time.Duration(0)
@@ -189,10 +186,10 @@ func printCleanupSummary(results []cleanupResult, totalSpaceFreed, startSpace ui
 		spaceFreed := getColoredSpaceFreed(result.spaceFreed, maxSpaceFreed, startSpace)
 		timeTaken := getColoredDuration(result.duration, maxDuration)
 
-		table.Append([]string{result.cleanupType, status, spaceFreed, timeTaken})
+		table.Append(result.cleanupType, status, spaceFreed, timeTaken)
 	}
 
-	table.SetFooter([]string{"Total", "", utils.FormatBytes(totalSpaceFreed), ""})
+	table.Footer("Total", "", utils.FormatBytes(totalSpaceFreed), "")
 	table.Render()
 }
 

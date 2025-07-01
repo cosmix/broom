@@ -4,7 +4,6 @@ go 1.22.1
 
 require (
 	github.com/briandowns/spinner v1.23.2
-	github.com/fatih/color v1.17.0
 	github.com/fatih/color v1.18.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/manifoldco/promptui v0.9.0
