@@ -1,3 +1,4 @@
+// Package tui provides terminal user interface components for broom
 package tui
 
 import (
@@ -213,7 +214,17 @@ func (m SimpleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.quitting = true
 				return m, tea.Quit
 			case "r":
-				return InitialSimpleModel(), nil
+				// Reset to selection view while preserving model structure
+				m.stage = Selection
+				m.selected = make(map[int]bool)
+				m.cursor = 0
+				m.viewportStart = 0
+				m.results = []CleanupResult{}
+				m.currentIndex = 0
+				m.progressLog = []string{}
+				m.logViewStart = 0
+				m.startSpace = utils.GetFreeDiskSpace()
+				return m, nil
 			}
 		}
 		
@@ -339,7 +350,7 @@ func (m SimpleModel) selectionView(b *strings.Builder) string {
 				checked = simpleSelectedStyle.Render("✓")
 			}
 			
-			cleanerName := strings.Title(strings.ReplaceAll(choice, "-", " "))
+			cleanerName := toTitle(strings.ReplaceAll(choice, "-", " "))
 			// Truncate long names to fit in columns
 			if len(cleanerName) > 18 {
 				cleanerName = cleanerName[:15] + "..."
@@ -367,7 +378,7 @@ func (m SimpleModel) selectionView(b *strings.Builder) string {
 	
 	selectedCount := len(m.getSelectedChoices())
 	totalCount := len(m.choices)
-	b.WriteString(fmt.Sprintf("\nSelected: %d/%d cleaners", selectedCount, totalCount))
+	fmt.Fprintf(b, "\nSelected: %d/%d cleaners", selectedCount, totalCount)
 	
 	b.WriteString("\n\n")
 	b.WriteString(simpleHelpStyle.Render("↑/k up • ↓/j down • ←/h left • →/l right • PgUp/PgDn page • space select • a select all • A deselect all • enter continue • q quit"))
@@ -382,8 +393,8 @@ func (m SimpleModel) confirmationView(b *strings.Builder) string {
 	selectedChoices := m.getSelectedChoices()
 	
 	// Show summary first
-	b.WriteString(fmt.Sprintf("About to run %d cleaners:\n", len(selectedChoices)))
-	b.WriteString(fmt.Sprintf("Current free space: %s\n\n", utils.FormatBytes(m.startSpace)))
+	fmt.Fprintf(b, "About to run %d cleaners:\n", len(selectedChoices))
+	fmt.Fprintf(b, "Current free space: %s\n\n", utils.FormatBytes(m.startSpace))
 	
 	// Grid layout for selected cleaners (3-4 columns)
 	cols := 3
@@ -401,7 +412,7 @@ func (m SimpleModel) confirmationView(b *strings.Builder) string {
 		
 		for col := 0; col < cols && i+col < len(selectedChoices); col++ {
 			choice := selectedChoices[i+col]
-			cleanerName := strings.Title(strings.ReplaceAll(choice, "-", " "))
+			cleanerName := toTitle(strings.ReplaceAll(choice, "-", " "))
 			
 			// Truncate name to fit in column
 			maxLen := 20
@@ -464,7 +475,7 @@ func (m SimpleModel) executionView(b *strings.Builder) string {
 		for col := 0; col < cols && i+col < len(selectedChoices); col++ {
 			idx := i + col
 			choice := selectedChoices[idx]
-			cleanerName := strings.Title(strings.ReplaceAll(choice, "-", " "))
+			cleanerName := toTitle(strings.ReplaceAll(choice, "-", " "))
 			
 			// Truncate name to fit in compact grid
 			maxLen := 12
@@ -532,7 +543,7 @@ func (m SimpleModel) executionView(b *strings.Builder) string {
 		
 		// Show scroll indicator if needed
 		if start > 0 {
-			b.WriteString(simpleBlurredStyle.Render(fmt.Sprintf("... (%d more entries above)", start)))
+			fmt.Fprintf(b, "%s", simpleBlurredStyle.Render(fmt.Sprintf("... (%d more entries above)", start)))
 		}
 	}
 	
@@ -787,27 +798,8 @@ func (m SimpleModel) getGridPosition() (row, col int) {
 	return row, col
 }
 
-// getVisibleChoices returns the choices that should be visible in the current viewport
-func (m SimpleModel) getVisibleChoices() ([]string, int, int) {
-	if m.height <= 0 {
-		return m.choices, 0, len(m.choices)
-	}
-	
-	availableHeight := m.height - 6
-	if availableHeight <= 0 {
-		availableHeight = 10
-	}
-	
-	start := m.viewportStart
-	end := start + availableHeight
-	if end > len(m.choices) {
-		end = len(m.choices)
-	}
-	
-	return m.choices[start:end], start, end
-}
 
-// Messages for async operations
+// CleanupCompleteMsg represents completion of all cleanup operations
 type CleanupCompleteMsg struct {
 	Results []CleanupResult
 }
@@ -869,13 +861,16 @@ func (m SimpleModel) performSingleCleanup(choice string) tea.Cmd {
 	}
 }
 
-func (m SimpleModel) sendProgressUpdate(message string) tea.Cmd {
-	return func() tea.Msg {
-		return CleanupProgressMsg{
-			Index:   m.currentIndex,
-			Message: message,
+
+// toTitle converts a string to title case (simple implementation)
+func toTitle(s string) string {
+	words := strings.Fields(s)
+	for i, word := range words {
+		if len(word) > 0 {
+			words[i] = strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
 		}
 	}
+	return strings.Join(words, " ")
 }
 
 // RunSimpleTUI starts the simplified TUI

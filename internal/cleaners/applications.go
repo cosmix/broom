@@ -116,14 +116,37 @@ func cleanRubyGems(commandExists utils.CommandExistsFunc) func() error {
 }
 
 func cleanPythonCache() error {
-	// Combine both Python cleanup operations into a single filesystem traversal
-	// This is much faster than two separate searches
-	combinedArgs := "\\( -type d -name __pycache__ -exec rm -rf {} + \\) -o \\( -name '*.pyc' -delete \\)"
-	
-	err := utils.Runner.RunFdOrFind("/home /tmp", combinedArgs, "Removing Python cache files and .pyc files", true)
-	if err != nil {
-		fmt.Printf("Warning: Error while cleaning Python files: %v\n", err)
+	// Target user's home directory for better performance instead of all of /home
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/home"
 	}
+	
+	// Clean pip cache directory first (most space savings)
+	pipCacheDir := fmt.Sprintf("%s/.cache/pip", homeDir)
+	err := utils.Runner.RunWithIndicator(fmt.Sprintf("rm -rf %s", pipCacheDir), "Removing pip cache")
+	if err != nil {
+		fmt.Printf("Warning: Error while cleaning pip cache: %v\n", err)
+	}
+	
+	// Remove __pycache__ directories
+	err = utils.Runner.RunFdOrFind(homeDir, "-type d -name __pycache__ -exec rm -rf {} +", "Removing __pycache__ directories", true)
+	if err != nil {
+		fmt.Printf("Warning: Error while removing __pycache__: %v\n", err)
+	}
+	
+	// Remove .pyc files
+	err = utils.Runner.RunFdOrFind(homeDir, "-name '*.pyc' -delete", "Removing .pyc files", true)
+	if err != nil {
+		fmt.Printf("Warning: Error while removing .pyc files: %v\n", err)
+	}
+	
+	// Clean Python temp files in /tmp (much faster with direct rm)
+	err = utils.Runner.RunWithIndicator("rm -rf /tmp/pip-* /tmp/easy_install-* /tmp/tmp*", "Removing temporary Python files")
+	if err != nil {
+		fmt.Printf("Warning: Error while cleaning /tmp Python files: %v\n", err)
+	}
+	
 	return nil
 }
 

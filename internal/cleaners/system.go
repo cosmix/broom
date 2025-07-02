@@ -2,6 +2,7 @@ package cleaners
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cosmix/broom/internal/utils"
 )
@@ -16,7 +17,24 @@ func init() {
 }
 
 func removeOldKernels() error {
-	return utils.Runner.RunWithIndicator("dpkg --list | grep linux-image | awk '{ print $2 }' | sort -V | sed -n '/'`uname -r`'/q;p' | xargs sudo apt-get -y purge", "Removing old kernels...")
+	// First, get the current kernel version
+	currentKernel, err := utils.Runner.RunWithOutput("uname -r")
+	if err != nil {
+		return fmt.Errorf("failed to get current kernel version: %v", err)
+	}
+	currentKernel = strings.TrimSpace(currentKernel)
+	
+	// Get list of old kernels to remove (excluding current)
+	cmd := fmt.Sprintf("dpkg --list | grep linux-image | grep -v %s | awk '{ print $2 }' | grep -E 'linux-image-[0-9]' | head -n -1", currentKernel)
+	oldKernels, err := utils.Runner.RunWithOutput(cmd)
+	if err != nil || strings.TrimSpace(oldKernels) == "" {
+		fmt.Println("No old kernels to remove")
+		return nil
+	}
+	
+	// Remove old kernels
+	kernelList := strings.TrimSpace(oldKernels)
+	return utils.Runner.RunWithIndicator(fmt.Sprintf("apt-get -y purge %s", kernelList), "Removing old kernels...")
 }
 
 func clearApt() error {
